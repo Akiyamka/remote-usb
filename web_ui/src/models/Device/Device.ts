@@ -1,0 +1,44 @@
+import { signal } from '@preact/signals';
+import type { DeviceInfo, RPCAPI } from '../../RPCAPI';
+
+export type DeviceMode = 'unknown' | 'remote_access' | 'drive_emulation';
+
+export class Device {
+  $currentMode = signal<DeviceMode>('unknown');
+  $isConnecting = signal<boolean>(false);
+  $errorMessage = signal<string | null>(null);
+  $deviceInfo = signal<null | DeviceInfo>(null);
+  rpc: RPCAPI;
+
+  constructor(rpc: RPCAPI) {
+    this.rpc = rpc;
+  }
+
+  /**
+   * Subscribes to device info changes and errors
+   */
+  async connect() {
+    this.$isConnecting.value = true;
+    try {
+      await this.rpc.subscribeToDevice(({ deviceInfo }) => {
+        this.$deviceInfo.value = deviceInfo;
+      });
+    } catch (e) {
+      if (e instanceof DeviceError) {
+        if (e.message === 'ConnectionLost') {
+          // First time try to reconnect instantly, then increase the reconnect interval
+          // Update connecting error message with seconds countdown until next attempt
+        }
+      } else {
+        this.$errorMessage.value = e instanceof Error ? e.message : String(e);
+      }
+    } finally {
+      this.$isConnecting.value = false;
+    }
+  }
+
+  restart() {}
+
+  // Toggle between 'remote_access' and 'drive_emulation'
+  toggleState() {}
+}

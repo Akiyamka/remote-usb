@@ -1,0 +1,24 @@
+{
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@10.33.2",
+	"imports": {
+		"#models/*": "./src/models/*",
+		"#components/*": "./src/components/*"
+	},
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"@preact/signals": "^2.9.1",
+		"preact": "^10.26.9",
+		"preact-iso": "^2.12.0"
+	},
+	"devDependencies": {
+		"@preact/preset-vite": "^2.10.2",
+		"typescript": "^6.0.3",
+		"vite": "^7.0.4"
+	}
+}
