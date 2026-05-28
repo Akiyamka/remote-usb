@@ -4,9 +4,9 @@ import { LocationProvider, Router, Route } from 'preact-iso';
 import { StatusOverlay } from '#components/StatusOverlay/index.jsx';
 import { NotFound } from './pages/_404.jsx';
 import { FileManagerPage } from './pages/FileManager/FileManagerPage.jsx';
-import { Device } from '#models/Device/Device.jsx';
+import { Device } from '#models/Device/Device.js';
 import { RPC } from './RPCAPI.js';
-import { FileManager } from '#models/FileManager/FileManager.jsx';
+import { FileManager } from '#models/FileManager/FileManager.js';
 import { InitialPage } from './pages/InitialPage/index.jsx';
 import './style.css';
 import { EmulationPage } from './pages/EmulationPage/index.jsx';
@@ -24,9 +24,9 @@ export function App() {
           <Route
             path="/"
             component={
-              device.$currentMode.value === 'remote_access'
+              device.$currentMode.value === 'http'
                 ? FileManagerPage
-                : device.$currentMode.value === 'drive_emulation'
+                : device.$currentMode.value === 'usb'
                   ? EmulationPage
                   : InitialPage
             }

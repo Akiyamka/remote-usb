@@ -7,5 +7,5 @@ export function Modal({
   children: ComponentChildren;
   userCanClose?: boolean;
 }) {
-  return <div>{children}</div>;
+  return <div data-user-can-close={userCanClose ? 'true' : 'false'}>{children}</div>;
 }
