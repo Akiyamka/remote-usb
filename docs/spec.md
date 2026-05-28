@@ -1365,6 +1365,21 @@ CONFIG_FATFS_PER_FILE_CACHE=n  # save RAM
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
+# Flash size — T-Dongle S3 ships with 16 MB Quad-SPI flash (see hardware.md).
+# Required: the partition table from §10.5.2 (3 MB factory + 1 MB webfs +
+# bootloader/nvs/phy_init) does not fit into the IDF default of 2 MB.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# Post-flash behaviour: keep the chip in the bootloader instead of doing a
+# hard reset. On ESP32-S3 the host talks to the built-in USB-Serial-JTAG over
+# USB-CDC; the "RTS pulse" that esptool's default `hard_reset` uses is
+# interpreted as GPIO0=LOW by that peripheral, so the chip lands back in
+# DOWNLOAD mode (boot:0x22) right after flashing. With NORESET the developer
+# simply unplugs/replugs (or presses the on-board reset) and the new app runs.
+CONFIG_ESPTOOLPY_AFTER_NORESET=y
+CONFIG_ESPTOOLPY_AFTER="no_reset"
+
 # System
 CONFIG_ESP_TASK_WDT_INIT=n     # for development; set back to y for production
 CONFIG_BOOTLOADER_LOG_LEVEL_INFO=y

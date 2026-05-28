@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Wrapper that runs `idf.py` inside the official Espressif ESP-IDF
+# container via Podman. Keeps the host clean from Python/ninja/toolchain
+# pollution and pins the IDF version per-project.
+#
+# Usage (from anywhere):
+#   firmware/tools/idf set-target esp32s3
+#   firmware/tools/idf build
+#   firmware/tools/idf -p /dev/ttyACM0 flash monitor
+#   firmware/tools/idf menuconfig
+#
+# Env overrides:
+#   ESP_IDF_IMAGE   container image (default pinned below)
+#   PODMAN          podman binary name/path (default: podman)
+
+set -euo pipefail
+
+# Pin to v5.3 per spec.md §13. Bump deliberately when upgrading IDF.
+IMAGE="${ESP_IDF_IMAGE:-docker.io/espressif/idf:release-v5.3}"
+PODMAN="${PODMAN:-podman}"
+
+# Resolve the firmware/ directory (parent of this script's dir).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIRMWARE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Use a TTY only when stdin/stdout are terminals (so CI keeps working).
+TTY_FLAGS=()
+if [[ -t 0 && -t 1 ]]; then
+  TTY_FLAGS+=("-it")
+fi
+
+# Auto-detect serial device arguments (e.g. `-p /dev/ttyACM0`) and pass them
+# through to the container. To make the device actually readable inside the
+# container we propagate the host user's supplementary groups via
+# `--group-add keep-groups` (requires the crun OCI runtime, which is the
+# Podman default on modern distros). Without it, `--userns=keep-id` maps
+# only the primary UID/GID and `dialout` access is lost.
+DEVICE_FLAGS=()
+GROUP_FLAGS=()
+for arg in "$@"; do
+  if [[ "$arg" == /dev/tty* || "$arg" == /dev/serial/* ]]; then
+    DEVICE_FLAGS+=("--device=$arg")
+  fi
+done
+if (( ${#DEVICE_FLAGS[@]} > 0 )); then
+  GROUP_FLAGS+=("--group-add" "keep-groups")
+fi
+
+# Persist ccache / component-manager cache across runs (optional, big speedup).
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/esp-idf-podman"
+mkdir -p "$CACHE_DIR/ccache" "$CACHE_DIR/espressif"
+
+exec "$PODMAN" run --rm \
+  "${TTY_FLAGS[@]}" \
+  "${DEVICE_FLAGS[@]}" \
+  "${GROUP_FLAGS[@]}" \
+  --init \
+  --userns=keep-id \
+  --security-opt label=disable \
+  -v "$FIRMWARE_DIR:/project" \
+  -v "$CACHE_DIR/ccache:/root/.ccache" \
+  -v "$CACHE_DIR/espressif:/root/.espressif" \
+  -w /project \
+  -e IDF_CCACHE_ENABLE=1 \
+  "$IMAGE" \
+  idf.py "$@"

@@ -1,0 +1,51 @@
+# Target
+CONFIG_IDF_TARGET="esp32s3"
+
+# FreeRTOS
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_UNICORE=n
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=n
+
+# TinyUSB
+CONFIG_TINYUSB_TASK_PRIORITY=5
+CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y
+CONFIG_TINYUSB_MSC_BUFSIZE=8192
+CONFIG_TINYUSB_DEBUG_LEVEL=2
+
+# Wi-Fi
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+
+# HTTP server
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# FATFS
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
+CONFIG_FATFS_PER_FILE_CACHE=n
+
+# Partition table (custom, with the webfs LittleFS partition)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Flash size — T-Dongle S3 has 16 MB Quad-SPI flash (see docs/hardware.md).
+# Spec §13.1 omits this but the partition table from §10.5.2 (3 MB factory +
+# 1 MB webfs) exceeds the IDF default of 2 MB.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# Post-flash behaviour: do NOT hard-reset via RTS pulse. On ESP32-S3 the
+# built-in USB-Serial-JTAG interprets host-side RTS toggles as "GPIO0 = LOW",
+# so the default hard_reset leaves the chip in DOWNLOAD mode (boot:0x22).
+# With NORESET the chip stays where it is after flashing; we simply
+# unplug/replug or hit the on-board button to start the new app.
+CONFIG_ESPTOOLPY_AFTER_NORESET=y
+CONFIG_ESPTOOLPY_AFTER="no_reset"
+
+# System
+CONFIG_ESP_TASK_WDT_INIT=n
+CONFIG_BOOTLOADER_LOG_LEVEL_INFO=y
