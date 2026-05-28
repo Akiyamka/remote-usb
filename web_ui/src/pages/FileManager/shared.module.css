@@ -1,0 +1,29 @@
+.icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.iconButton {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  min-width: 36px;
+  padding: 8px;
+}
+
+.iconButton:hover {
+  background-color: var(--hover-color);
+}
+
+.textAction {
+  border: 1px solid hsla(0, 0%, 0%, 0.5) !important;
+  border-radius: 0;
+  padding: 6px 10px !important;
+  white-space: nowrap;
+}
+
+.textAction:hover {
+  background-color: var(--hover-color);
+}

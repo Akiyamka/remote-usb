@@ -1,0 +1,87 @@
+.root {
+  --line-color: hsla(0, 0%, 0%, 0.15);
+  --muted-color: hsla(0, 0%, 0%, 0.56);
+  --hover-color: hsla(0, 0%, 0%, 0.05);
+  --danger-color: rgb(176, 42, 42);
+  --progress-color: rgb(54, 172, 82);
+  color: hsla(0, 0%, 0%, 0.72);
+  display: flex;
+  flex: 1;
+  flex-flow: column nowrap;
+  height: 100vh;
+  margin: auto;
+  max-height: 100vh;
+  max-width: 1020px;
+  text-align: left;
+  width: min(1020px, calc(100vw - 32px));
+}
+
+.root * {
+  box-sizing: border-box;
+}
+
+.root button {
+  background-color: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.root button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.header {
+  align-items: center;
+  border-bottom: 2px solid var(--line-color);
+  display: flex;
+  gap: 8px;
+  padding: 24px 8px 16px;
+}
+
+.errors {
+  display: flex;
+  flex-flow: column nowrap;
+  gap: 6px;
+  padding: 8px;
+}
+
+.error {
+  align-items: center;
+  background-color: darkred;
+  border-radius: 8px;
+  color: white;
+  display: flex;
+  font-size: 0.9rem;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.footer {
+  border-top: 2px solid var(--line-color);
+  padding: 16px 0;
+}
+
+@media (max-width: 700px) {
+  .root {
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .header {
+    padding: 12px 8px 10px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .root {
+    --line-color: hsla(0, 0%, 100%, 0.18);
+    --muted-color: hsla(0, 0%, 100%, 0.55);
+    --hover-color: hsla(0, 0%, 100%, 0.07);
+    color: hsla(0, 0%, 100%, 0.76);
+  }
+}

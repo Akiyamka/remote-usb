@@ -4,16 +4,10 @@ import { LocationProvider, Router, Route } from 'preact-iso';
 import { StatusOverlay } from '#components/StatusOverlay/index.jsx';
 import { NotFound } from './pages/_404.jsx';
 import { FileManagerPage } from './pages/FileManager/FileManagerPage.jsx';
-import { Device } from '#models/Device/Device.js';
-import { RPC } from './RPCAPI.js';
-import { FileManager } from '#models/FileManager/FileManager.js';
+import { device } from './appState.js';
 import { InitialPage } from './pages/InitialPage/index.jsx';
 import './style.css';
 import { EmulationPage } from './pages/EmulationPage/index.jsx';
-
-const rpc = new RPC({ statusPollIntervalMs: 3000 });
-const device = new Device(rpc);
-const fileManager = new FileManager(rpc);
 
 export function App() {
   return (
@@ -41,6 +35,4 @@ export function App() {
 
 render(<App />, document.getElementById('app')!);
 
-device.connect().then(() => {
-  fileManager.openLastDir();
-});
+void device.connect();

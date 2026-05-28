@@ -1,0 +1,26 @@
+.root {
+  background: transparent;
+  height: 4px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.bar {
+  height: 2px;
+  position: relative;
+  width: 12%;
+}
+
+.active .bar {
+  animation: loading 1s linear infinite;
+  background-color: black;
+}
+
+@keyframes loading {
+  0% {
+    left: -12%;
+  }
+  100% {
+    left: 100%;
+  }
+}
