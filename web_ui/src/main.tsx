@@ -11,7 +11,7 @@ import { InitialPage } from './pages/InitialPage/index.jsx';
 import './style.css';
 import { EmulationPage } from './pages/EmulationPage/index.jsx';
 
-const rpc = new RPC();
+const rpc = new RPC({ statusPollIntervalMs: 3000 });
 const device = new Device(rpc);
 const fileManager = new FileManager(rpc);
 

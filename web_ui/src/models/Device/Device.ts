@@ -1,8 +1,10 @@
 import { signal } from '@preact/signals';
 import { DeviceError, type DeviceInfo, type DeviceMode, type RPCAPI } from '../../RPCAPI';
 
-
 export class Device {
+  private static readonly reconnectBaseDelayMs = 1_000;
+  private static readonly reconnectMaxDelayMs = 30_000;
+
   $currentMode = signal<DeviceMode>('switching');
   $isConnecting = signal<boolean>(false);
   $errorMessage = signal<string | null>(null);
@@ -17,25 +19,66 @@ export class Device {
    * Subscribes to device info changes and errors
    */
   async connect() {
+    let reconnectDelayMs = 0;
+
     this.$isConnecting.value = true;
-    try {
-      await this.rpc.subscribeToDevice(({ deviceInfo }) => {
-        this.$deviceInfo.value = deviceInfo;
-        this.$currentMode.value = deviceInfo.mode;
-      });
-    } catch (e) {
-      if (e instanceof DeviceError) {
-        if (e.message === 'ConnectionLost') {
-          // First time try to reconnect instantly, then increase the reconnect interval
-          // Update connecting error message with seconds countdown until next attempt
-          this.$errorMessage.value = 'Connection lost';
+    for (;;) {
+      try {
+        await this.rpc.subscribeToDevice(({ deviceInfo }) => {
+          this.$deviceInfo.value = deviceInfo;
+          this.$currentMode.value = deviceInfo.mode;
+        });
+
+        this.$errorMessage.value = null;
+        this.$isConnecting.value = false;
+        return;
+      } catch (e) {
+        if (e instanceof DeviceError && e.code === 'ConnectionLost') {
+          await this.waitBeforeReconnect(reconnectDelayMs);
+          reconnectDelayMs = this.nextReconnectDelay(reconnectDelayMs);
+          continue;
         }
-      } else {
+
         this.$errorMessage.value = e instanceof Error ? e.message : String(e);
+        this.$isConnecting.value = false;
+        return;
       }
-    } finally {
-      this.$isConnecting.value = false;
     }
+  }
+
+  private async waitBeforeReconnect(delayMs: number): Promise<void> {
+    if (delayMs === 0) {
+      this.$errorMessage.value = 'Connection lost. Reconnecting...';
+      return;
+    }
+
+    let remainingMs = delayMs;
+
+    while (remainingMs > 0) {
+      this.$errorMessage.value = `Connection lost. Reconnecting in ${Math.ceil(
+        remainingMs / 1_000,
+      )}s`;
+
+      const stepMs = Math.min(remainingMs, 1_000);
+      await this.delay(stepMs);
+      remainingMs -= stepMs;
+    }
+
+    this.$errorMessage.value = 'Connection lost. Reconnecting...';
+  }
+
+  private nextReconnectDelay(currentDelayMs: number): number {
+    if (currentDelayMs === 0) {
+      return Device.reconnectBaseDelayMs;
+    }
+
+    return Math.min(currentDelayMs * 2, Device.reconnectMaxDelayMs);
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      globalThis.setTimeout(resolve, ms);
+    });
   }
 
   restart() {}
