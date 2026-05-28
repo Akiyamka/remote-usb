@@ -27,7 +27,7 @@ podman pull docker.io/espressif/idf:release-v5.3
 ./tools/idf build
 
 # Flashing & monitoring (replace the device path as needed):
-./tools/idf -p /dev/ttyACM0 flash monitor
+./tools/idf -p /dev/ttyACM1 flash monitor
 
 # Menuconfig (interactive ncurses UI — works thanks to -it in the wrapper)
 ./tools/idf menuconfig
