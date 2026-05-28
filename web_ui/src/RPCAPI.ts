@@ -39,16 +39,23 @@ export type ModeSwitchResult = {
   no_change?: true;
 };
 
+type FileSystemEntryBase = {
+  name: string;
+  /**
+   * Last modification time as Unix timestamp in seconds.
+   * May be omitted or null when the filesystem timestamp is unavailable.
+   */
+  mtime?: number | null;
+};
+
 export type FileSystemEntry =
-  | {
-      name: string;
+  | (FileSystemEntryBase & {
       type: 'dir';
-    }
-  | {
-      name: string;
+    })
+  | (FileSystemEntryBase & {
       type: 'file';
       sizeKb: number;
-    };
+    });
 
 export type FileListResult = {
   ok: true;

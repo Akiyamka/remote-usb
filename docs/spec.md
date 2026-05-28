@@ -932,9 +932,9 @@ Versioning rule: `api_version` is incremented only on **incompatible** changes (
   "ok": true,
   "path": "gcode",
   "entries": [
-    { "name": "benchy", "type": "dir" },
-    { "name": "test.gcode", "type": "file", "sizeKb": 1048576 },
-    { "name": "calibration.gcode", "type": "file", "sizeKb": 204800 }
+    { "name": "benchy", "type": "dir", "mtime": 1717245660 },
+    { "name": "test.gcode", "type": "file", "sizeKb": 1048576, "mtime": 1717249200 },
+    { "name": "calibration.gcode", "type": "file", "sizeKb": 204800, "mtime": null }
   ]
 }
 
@@ -957,6 +957,8 @@ HTTP 400  { "ok": false, "error": "invalid_path" }
 // Insufficient space on the card
 HTTP 507  { "ok": false, "error": "insufficient_storage", "free_mb": 12 }
 ```
+
+`mtime` is the last modification time as a Unix timestamp in seconds, UTC. The field may be omitted or set to `null` when the filesystem timestamp is unavailable; clients must handle both cases.
 
 ### 11.4. File upload: raw body streaming
 
