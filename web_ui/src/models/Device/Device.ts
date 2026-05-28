@@ -1,10 +1,9 @@
 import { signal } from '@preact/signals';
-import type { DeviceInfo, RPCAPI } from '../../RPCAPI';
+import type { DeviceInfo, DeviceMode, RPCAPI } from '../../RPCAPI';
 
-export type DeviceMode = 'unknown' | 'remote_access' | 'drive_emulation';
 
 export class Device {
-  $currentMode = signal<DeviceMode>('unknown');
+  $currentMode = signal<DeviceMode>('switching');
   $isConnecting = signal<boolean>(false);
   $errorMessage = signal<string | null>(null);
   $deviceInfo = signal<null | DeviceInfo>(null);

@@ -1,7 +1,6 @@
 import { render } from 'preact';
 import { LocationProvider, Router, Route } from 'preact-iso';
 
-import { Header } from './components/Header.jsx';
 import { StatusOverlay } from '#components/StatusOverlay/index.jsx';
 import { NotFound } from './pages/_404.jsx';
 import { FileManagerPage } from './pages/FileManager/FileManagerPage.jsx';
@@ -19,7 +18,6 @@ const fileManager = new FileManager(rpc);
 export function App() {
   return (
     <LocationProvider>
-      <Header />
       <main>
         <StatusOverlay />
         <Router>

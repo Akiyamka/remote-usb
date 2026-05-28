@@ -27,7 +27,10 @@ export class FileManager {
   }
 
   // after file is uploaded then re-fetch current directory files if user in target directory right now
-  async uploadFileToDevice(file: File, pathDescriptor: string[]) {
+  // upload only one file at time
+  // use XMLHttpRequest to be able track progress
+  // send files as raw body (File/Blob, not multipart)
+  async uploadFilesToDevice(files: File[], pathDescriptor: string[]) {
 
   }
 
