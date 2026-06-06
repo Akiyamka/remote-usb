@@ -359,7 +359,10 @@ esp_err_t sd_fatfs_deinit(void)
     // unmount automatically flushes FATFS buffers
     esp_err_t ret = esp_vfs_fat_sdcard_unmount(MOUNT_POINT, s_card);
     s_card = NULL;
-    return ret;
+    if (ret != ESP_OK) return ret;
+    // IDF 5.3 leaves the SDMMC peripheral initialized after FATFS unmount.
+    // Release it explicitly so the next sd_raw_init() starts from a clean host.
+    return sdmmc_host_deinit();
 }
 ```
 
@@ -369,6 +372,12 @@ esp_err_t sd_fatfs_deinit(void)
 - Before any transition into `STATE_ERROR` (if the card was mounted)
 
 Otherwise FATFS buffers in RAM will not be flushed → "Volume was not properly unmounted" on the next mount.
+
+After a successful `esp_vfs_fat_sdcard_unmount()`, `sd_fatfs_deinit()` must also
+call `sdmmc_host_deinit()`. This was verified on IDF 5.3: without the explicit
+host deinit, a subsequent `sd_raw_init()` logs `SDMMC host already initialized`,
+meaning the FATFS release did not fully return the peripheral to the raw/MSC
+owner.
 
 ---
 

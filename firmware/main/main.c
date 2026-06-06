@@ -8,6 +8,8 @@
 
 #include "bsp_lcd.h"
 #include "bsp_led.h"
+#include "sd_fatfs.h"
+#include "sd_raw.h"
 
 static const char *TAG = "main";
 
@@ -35,6 +37,46 @@ static void phase1_welcome_screen(void)
                                                BSP_LCD_GREEN, BSP_LCD_BLACK));
 }
 
+static esp_err_t phase2_storage_smoke_test(void)
+{
+    ESP_LOGI(TAG, "Phase 2 storage smoke test: FATFS mount");
+    esp_err_t ret = sd_fatfs_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "sd_fatfs_init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    const uint64_t total_mb = sd_fatfs_get_total_bytes() / (1024ULL * 1024ULL);
+    const uint64_t free_mb = sd_fatfs_get_free_bytes() / (1024ULL * 1024ULL);
+    ESP_LOGI(TAG, "FATFS %s: total=%" PRIu64 " MB free=%" PRIu64 " MB",
+             sd_fatfs_mount_point(), total_mb, free_mb);
+
+    ret = sd_fatfs_deinit();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "sd_fatfs_deinit failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Phase 2 storage smoke test: raw SDMMC init");
+    ret = sd_raw_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "sd_raw_init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Raw SDMMC: sectors=%" PRIu32 " sector_size=%" PRIu16,
+             sd_raw_get_sector_count(), sd_raw_get_sector_size());
+
+    ret = sd_raw_deinit();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "sd_raw_deinit failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Phase 2 storage smoke test done");
+    return ESP_OK;
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "boot " APP_VERSION_STR);
@@ -52,7 +94,12 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     ESP_ERROR_CHECK(bsp_led_off());
 
-    ESP_LOGI(TAG, "Phase 1 bring-up done; idling");
+    esp_err_t ret = phase2_storage_smoke_test();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Phase 2 bring-up done; idling");
+    } else {
+        ESP_LOGE(TAG, "Phase 2 bring-up failed: %s", esp_err_to_name(ret));
+    }
 
     // Heartbeat log so a serial monitor still confirms liveness even when
     // the screen is steady. Will be replaced by the real state machine in
