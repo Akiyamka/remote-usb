@@ -1,6 +1,6 @@
 # Specification: Wi-Fi USB Drive on ESP32-S3 (T-Dongle S3)
 
-**Version:** 0.0.3
+**Version:** 0.0.4
 **Platform:** LilyGO T-Dongle S3 (ESP32-S3, 16 MB Flash, no PSRAM)
 **SDK:** ESP-IDF v5.3.x
 
@@ -101,7 +101,7 @@ This yields user-friendly behavior: if something is wrong with Wi-Fi, the user p
 ### 4.1. Full process
 
 ```
-1. Display "Welcome / v0.0.2"
+1. Display "Welcome / v0.0.4"
 2. Init APA102 LED, LCD (ST7735)
 3. Try sd_fatfs_init()
    ├── Failed → "SD Card required", LED blink red, STATE_ERROR
@@ -404,6 +404,20 @@ esp_err_t sd_owner_switch_to_msc(void);
 esp_err_t sd_owner_release(void);  // to SD_OWNER_NONE
 ```
 
+**Component boundary**: `components/storage` must not depend on the future
+`usb_msc` component. `sd_owner.c` provides weak no-op hooks:
+
+```c
+void usb_msc_set_media_present(bool present);
+bool usb_msc_is_busy(void);
+```
+
+In Phase 3 these weak defaults keep switching testable without USB MSC. In
+Phase 4, `usb_msc` provides strong definitions with the same names. If
+`usb_msc_is_busy()` returns true, `sd_owner_switch_to_fatfs()` and
+`sd_owner_release()` must return `ESP_ERR_INVALID_STATE` without taking the
+card away from MSC.
+
 ### 8.2. Switching implementation
 
 ```c
@@ -456,6 +470,10 @@ esp_err_t sd_owner_switch_to_fatfs(void)
 
     if (s_owner == SD_OWNER_MSC) {
         // First, "eject" the media for the host
+        if (usb_msc_is_busy()) {
+            xSemaphoreGive(s_owner_mutex);
+            return ESP_ERR_INVALID_STATE;
+        }
         usb_msc_set_media_present(false);
         // Let TinyUSB process any remaining SCSI commands
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -474,6 +492,33 @@ esp_err_t sd_owner_switch_to_fatfs(void)
     s_owner = SD_OWNER_FATFS;
     xSemaphoreGive(s_owner_mutex);
     return ESP_OK;
+}
+
+esp_err_t sd_owner_release(void)
+{
+    xSemaphoreTake(s_owner_mutex, portMAX_DELAY);
+
+    esp_err_t ret = ESP_OK;
+    if (s_owner == SD_OWNER_FATFS) {
+        ret = sd_fatfs_deinit();
+    } else if (s_owner == SD_OWNER_MSC) {
+        if (usb_msc_is_busy()) {
+            xSemaphoreGive(s_owner_mutex);
+            return ESP_ERR_INVALID_STATE;
+        }
+        usb_msc_set_media_present(false);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        ret = sd_raw_sync();
+        if (ret == ESP_OK) {
+            ret = sd_raw_deinit();
+        }
+    }
+
+    if (ret == ESP_OK) {
+        s_owner = SD_OWNER_NONE;
+    }
+    xSemaphoreGive(s_owner_mutex);
+    return ret;
 }
 ```
 
@@ -930,7 +975,7 @@ Versioning rule: `api_version` is incremented only on **incompatible** changes (
 ```jsonc
 // GET /api/status
 {
-  "fw_version": "0.0.3",         // firmware version
+  "fw_version": "0.0.4",         // firmware version
   "api_version": 1,              // HTTP API contract version
   "mode": "http",                // "usb" | "http" | "switching"
   "sd": {
@@ -1289,7 +1334,7 @@ then offsets the caret to centre the line in the 160 px viewport.
 **Welcome screen:**
 ```
 Welcome
-v0.0.3
+v0.0.4
 ```
 
 **Memory screen:**
@@ -1651,7 +1696,7 @@ void app_main(void)
 
 | State | LED | LCD |
 |---|---|---|
-| Boot welcome | Off | "Welcome / v0.0.2" |
+| Boot welcome | Off | "Welcome / v0.0.4" |
 | SD memory shown | Off | "Memory / total: X / free: Y" |
 | Connecting | Blink white | "Connecting to <SSID>" |
 | Connect success | Solid green (2s) → mode color | "<SSID> / <IP>" |
