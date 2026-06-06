@@ -5,18 +5,21 @@
 #include "freertos/task.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
 
 #include "bsp_lcd.h"
 #include "bsp_led.h"
-#include "sd_raw.h"
-#include "usb_msc.h"
+#include "sd_fatfs.h"
+#include "sd_owner.h"
+#include "wifi_cfg.h"
+#include "wifi_mgr.h"
 
 static const char *TAG = "main";
 
 // Firmware revision banner shown on the welcome screen. Bumped alongside
 // each spec/plan revision so we can verify on the LCD which build is
 // actually flashed onto the device.
-#define APP_VERSION_STR  "v0.0.5"
+#define APP_VERSION_STR  "v0.0.6"
 
 static void phase1_welcome_screen(void)
 {
@@ -37,27 +40,103 @@ static void phase1_welcome_screen(void)
                                                BSP_LCD_GREEN, BSP_LCD_BLACK));
 }
 
-static esp_err_t phase4_usb_msc_smoke_test(void)
+static esp_err_t init_nvs(void)
 {
-    ESP_LOGI(TAG, "Phase 4 USB MSC smoke test: raw SDMMC -> TinyUSB MSC");
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
+        ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    return ret;
+}
 
-    esp_err_t ret = sd_raw_init();
+static esp_err_t phase5_wifi_smoke_test(void)
+{
+    ESP_LOGI(TAG, "Phase 5 Wi-Fi smoke test: FATFS wifi.cfg/NVS -> STA");
+
+    esp_err_t ret = init_nvs();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "sd_raw_init failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "NVS init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_LOGI(TAG, "Raw SDMMC: sectors=%" PRIu32 " sector_size=%" PRIu16,
-             sd_raw_get_sector_count(), sd_raw_get_sector_size());
-
-    ret = usb_msc_init();
+    ret = sd_owner_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "usb_msc_init failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "sd_owner_init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    usb_msc_set_media_present(true);
-    ESP_LOGI(TAG, "Phase 4 USB MSC smoke test done; media visible to host");
+    ret = sd_owner_switch_to_fatfs();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "sd_owner_switch_to_fatfs failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "FATFS mounted: total=%" PRIu64 " free=%" PRIu64,
+             sd_fatfs_get_total_bytes(), sd_fatfs_get_free_bytes());
+
+    wifi_creds_t creds = {0};
+    wifi_creds_source_t source = WIFI_CREDS_NONE;
+
+    ret = wifi_cfg_read_from_sd(&creds);
+    if (ret == ESP_OK) {
+        source = WIFI_CREDS_FROM_FILE;
+        ESP_LOGI(TAG, "Using credentials from /sdcard/wifi.cfg");
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        ret = wifi_cfg_read_from_nvs(&creds);
+        if (ret == ESP_OK) {
+            source = WIFI_CREDS_FROM_NVS;
+            ESP_LOGI(TAG, "Using credentials from NVS");
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ret = wifi_cfg_create_default();
+            if (ret == ESP_OK) {
+                ESP_LOGW(TAG, "Created /sdcard/wifi.cfg; fill it and reboot");
+                return ESP_ERR_NOT_FOUND;
+            }
+            ESP_LOGE(TAG, "Failed to create default wifi.cfg: %s",
+                     esp_err_to_name(ret));
+            return ret;
+        } else {
+            ESP_LOGE(TAG, "wifi_cfg_read_from_nvs failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
+    } else {
+        ESP_LOGE(TAG, "/sdcard/wifi.cfg is invalid: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = wifi_mgr_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "wifi_mgr_init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = wifi_mgr_connect(&creds, 15000);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "wifi_mgr_connect failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    wifi_status_t status = {0};
+    wifi_mgr_get_status(&status);
+    ESP_LOGI(TAG, "Wi-Fi connected: ssid='%s' ip=%s rssi=%d",
+             status.ssid, status.ip_str, status.rssi);
+
+    if (source == WIFI_CREDS_FROM_FILE) {
+        ret = wifi_cfg_save_to_nvs(&creds);
+        if (ret == ESP_OK) {
+            ret = wifi_cfg_delete_from_sd();
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to delete wifi.cfg after NVS save: %s",
+                         esp_err_to_name(ret));
+            }
+        } else {
+            ESP_LOGW(TAG, "Failed to save credentials to NVS: %s",
+                     esp_err_to_name(ret));
+        }
+    }
+
     return ESP_OK;
 }
 
@@ -78,11 +157,13 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     ESP_ERROR_CHECK(bsp_led_off());
 
-    esp_err_t ret = phase4_usb_msc_smoke_test();
+    esp_err_t ret = phase5_wifi_smoke_test();
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "Phase 4 bring-up done; idling");
+        ESP_LOGI(TAG, "Phase 5 bring-up done; idling");
+        ESP_ERROR_CHECK(bsp_led_set_rgb(0, 255, 0));
     } else {
-        ESP_LOGE(TAG, "Phase 4 bring-up failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Phase 5 bring-up failed: %s", esp_err_to_name(ret));
+        ESP_ERROR_CHECK(bsp_led_set_rgb(255, 0, 0));
     }
 
     // Heartbeat log so a serial monitor still confirms liveness even when

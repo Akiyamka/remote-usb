@@ -3,6 +3,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         bsp
+        nvs_flash
         storage
-        usb_msc
+        wifi_mgr
 )
