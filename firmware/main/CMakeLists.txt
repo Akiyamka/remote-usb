@@ -4,4 +4,5 @@ idf_component_register(
     REQUIRES
         bsp
         storage
+        usb_msc
 )

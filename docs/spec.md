@@ -1,6 +1,6 @@
 # Specification: Wi-Fi USB Drive on ESP32-S3 (T-Dongle S3)
 
-**Version:** 0.0.4
+**Version:** 0.0.5
 **Platform:** LilyGO T-Dongle S3 (ESP32-S3, 16 MB Flash, no PSRAM)
 **SDK:** ESP-IDF v5.3.x
 
@@ -101,7 +101,7 @@ This yields user-friendly behavior: if something is wrong with Wi-Fi, the user p
 ### 4.1. Full process
 
 ```
-1. Display "Welcome / v0.0.4"
+1. Display "Welcome / v0.0.5"
 2. Init APA102 LED, LCD (ST7735)
 3. Try sd_fatfs_init()
    ├── Failed → "SD Card required", LED blink red, STATE_ERROR
@@ -547,8 +547,28 @@ In `sdkconfig.defaults`:
 ```
 CONFIG_TINYUSB_TASK_PRIORITY=5
 CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y     # USB on core 0
+CONFIG_TINYUSB_MSC_ENABLED=y
 CONFIG_TINYUSB_MSC_BUFSIZE=8192
 CONFIG_TINYUSB_DEBUG_LEVEL=2
+```
+
+With Espressif's `esp_tinyusb` wrapper, `components/usb_msc/tusb_config.h`
+is kept as the local class-configuration reference, but the managed TinyUSB
+library is actually configured through Kconfig. `CONFIG_TINYUSB_MSC_ENABLED`
+must be enabled, and `CONFIG_TINYUSB_MSC_BUFSIZE=8192` maps to TinyUSB's MSC
+endpoint buffer size.
+
+The ESP32-S3 native USB peripheral enumerates as USB Full-Speed, not
+High-Speed. Linux should report the device as `full-speed` / `12M` in
+`dmesg` or `lsusb -t`. The practical MSC throughput target is therefore in
+the hundreds of kB/s, not multiple MB/s. Phase 4 baseline on T-Dongle S3 with
+the SE32G card:
+
+```
+Read:  dd if=/dev/sda of=/dev/null bs=1M count=20
+       20 MiB copied in 32.8212 s, 639 kB/s
+Write: dd if=/dev/zero of=/mnt/dd-test.bin bs=1M count=20 conv=fsync
+       20 MiB copied in 35.0127 s, 599 kB/s
 ```
 
 ### 9.2. Descriptors
@@ -622,10 +642,10 @@ bool usb_msc_is_busy(void);
 #include "sd_raw.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "freertos/atomic.h"
 
 static volatile bool s_media_present = false;
-static volatile int64_t s_last_io_us = 0;  // timestamp of the last read/write
+static volatile uint32_t s_io_in_progress = 0;
+static volatile uint32_t s_last_io_ms = 0;  // timestamp of the last completed read/write
 
 void usb_msc_set_media_present(bool present)
 {
@@ -635,9 +655,12 @@ void usb_msc_set_media_present(bool present)
 
 bool usb_msc_is_busy(void)
 {
-    // Considered busy if there was read/write activity in the last 500 ms
-    int64_t now = esp_timer_get_time();
-    return (now - s_last_io_us) < 500000;
+    // Considered busy while read/write is active or there was read/write
+    // activity in the last 500 ms.
+    if (s_io_in_progress > 0) return true;
+    if (s_last_io_ms == 0) return false;
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    return (uint32_t)(now_ms - s_last_io_ms) < 500;
 }
 
 // ===== Inquiry =====
@@ -696,12 +719,14 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset,
         return -1;
     }
 
-    s_last_io_us = esp_timer_get_time();
+    s_io_in_progress++;
     uint32_t sectors = bufsize / 512;
 
     int64_t t0 = esp_timer_get_time();
     esp_err_t err = sd_raw_read_sectors(buffer, lba, sectors);
     int64_t dt = esp_timer_get_time() - t0;
+    s_last_io_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    s_io_in_progress--;
 
     if (dt > 50000) {
         ESP_LOGW(TAG, "Slow read lba=%u cnt=%u dt=%lldus", lba, sectors, dt);
@@ -716,10 +741,12 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset,
     if (!s_media_present) return -1;
     if (offset != 0) return -1;
 
-    s_last_io_us = esp_timer_get_time();
+    s_io_in_progress++;
     uint32_t sectors = bufsize / 512;
 
     esp_err_t err = sd_raw_write_sectors(buffer, lba, sectors);
+    s_last_io_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    s_io_in_progress--;
     return (err == ESP_OK) ? bufsize : -1;
 }
 
@@ -975,7 +1002,7 @@ Versioning rule: `api_version` is incremented only on **incompatible** changes (
 ```jsonc
 // GET /api/status
 {
-  "fw_version": "0.0.4",         // firmware version
+  "fw_version": "0.0.5",         // firmware version
   "api_version": 1,              // HTTP API contract version
   "mode": "http",                // "usb" | "http" | "switching"
   "sd": {
@@ -1334,7 +1361,7 @@ then offsets the caret to centre the line in the 160 px viewport.
 **Welcome screen:**
 ```
 Welcome
-v0.0.4
+v0.0.5
 ```
 
 **Memory screen:**
@@ -1647,10 +1674,10 @@ void app_main(void)
 | No "Volume not properly unmounted" | After HTTP→USB switch | Message does not appear |
 | Windows recognition | Plug into Win 10/11 | Appears in Explorer < 5 sec |
 | 3D printer | Bambu/Prusa/Creality | Printer reads .gcode |
-| Read speed | `dd if=/dev/sda of=/dev/null bs=1M count=100` | ≥ 3 MB/s |
-| Write speed | `dd if=/dev/zero of=/dev/sda bs=1M count=100` | ≥ 1.5 MB/s |
+| Read speed | `dd if=/dev/sda of=/dev/null bs=1M count=20` | ≥ 500 kB/s on USB Full-Speed |
+| Write speed | `dd if=/dev/zero of=/mnt/dd-test.bin bs=1M count=20 conv=fsync` | ≥ 500 kB/s on USB Full-Speed |
 | OS eject | Eject → `dmesg` | No errors, no "improperly unmounted" |
-| Read timing | `tud_msc_read10_cb` logs | < 5 ms average |
+| Read/write timing | `tud_msc_read10_cb` / `tud_msc_write10_cb` logs | No repeated slow-transfer warnings; individual callback transfers stay below 50 ms in steady state |
 
 ### 15.2. Startup flow acceptance criteria
 
@@ -1696,7 +1723,7 @@ void app_main(void)
 
 | State | LED | LCD |
 |---|---|---|
-| Boot welcome | Off | "Welcome / v0.0.4" |
+| Boot welcome | Off | "Welcome / v0.0.5" |
 | SD memory shown | Off | "Memory / total: X / free: Y" |
 | Connecting | Blink white | "Connecting to <SSID>" |
 | Connect success | Solid green (2s) → mode color | "<SSID> / <IP>" |

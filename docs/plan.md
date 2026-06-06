@@ -155,24 +155,25 @@ components/usb_msc/
 ```
 
 **Steps.**
-1. `tusb_config.h` — from spec §9.1.
+1. `tusb_config.h` — local reference from spec §9.1; actual ESP-IDF
+   TinyUSB class settings are enabled through `sdkconfig.defaults`.
 2. `usb_descriptors.c` — VID/PID, device descriptor with `bcdUSB=0x0200`, MSC-only configuration descriptor.
    Serial number generated from MAC in `usb_msc_init`.
 3. `usb_msc.c`:
    - `usb_msc_init` — `tinyusb_driver_install(&cfg)`.
    - All `tud_msc_*` callbacks exactly as in spec §9.4.
-   - `s_media_present` (volatile), `s_last_io_us`.
+   - `s_media_present`, `s_io_in_progress`, `s_last_io_ms`.
 4. Wire up the call from `sd_owner.c` (callback / event).
 5. **Standalone test (without sd_owner):** temporary code in `app_main` — `sd_raw_init() → usb_msc_init() → usb_msc_set_media_present(true)`. The card shows up as `/dev/sdX` on Linux.
 
 **Definition of Done.**
 - `dmesg`: device enumerates as `Wireless Drive` < 2 s after plug-in.
 - No "extends beyond EOD" message.
-- `dd ... bs=1M count=100` reports ≥ 3 MB/s.
+- `dd ... bs=1M count=20` reports >= 500 kB/s on USB Full-Speed.
 
 **Pitfalls.**
 - Do NOT call `vTaskDelay` inside `tud_msc_read10/write10_cb`. Only the sd_raw mutex.
-- `CFG_TUD_MSC_EP_BUFSIZE=8192` — double buffering of 4 KB.
+- `CONFIG_TINYUSB_MSC_BUFSIZE=8192` — double buffering of 4 KB.
 - TinyUSB task must run **on core 0** (`CONFIG_TINYUSB_TASK_AFFINITY_CPU0=y`).
 
 ---
