@@ -22,7 +22,7 @@ static const char *TAG = "main";
 // Firmware revision banner shown on the welcome screen. Bumped alongside
 // each spec/plan revision so we can verify on the LCD which build is
 // actually flashed onto the device.
-#define APP_VERSION_STR  "v0.0.7"
+#define APP_VERSION_STR  "v0.0.8"
 
 static esp_err_t init_nvs(void)
 {
