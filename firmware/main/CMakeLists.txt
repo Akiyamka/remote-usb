@@ -2,8 +2,11 @@ idf_component_register(
     SRCS "main.c"
     INCLUDE_DIRS "."
     REQUIRES
-        bsp
+        http_server
         nvs_flash
         storage
+        ui
+        usb_msc
+        webfs
         wifi_mgr
 )

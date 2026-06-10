@@ -1,4 +1,4 @@
-#include <inttypes.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "freertos/FreeRTOS.h"
@@ -7,10 +7,13 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
-#include "bsp_lcd.h"
-#include "bsp_led.h"
+#include "http_server.h"
 #include "sd_fatfs.h"
 #include "sd_owner.h"
+#include "ui_led.h"
+#include "ui_state.h"
+#include "usb_msc.h"
+#include "webfs.h"
 #include "wifi_cfg.h"
 #include "wifi_mgr.h"
 
@@ -19,26 +22,7 @@ static const char *TAG = "main";
 // Firmware revision banner shown on the welcome screen. Bumped alongside
 // each spec/plan revision so we can verify on the LCD which build is
 // actually flashed onto the device.
-#define APP_VERSION_STR  "v0.0.6"
-
-static void phase1_welcome_screen(void)
-{
-    // Layout — landscape 160x80, Maple Mono Large (line_height = 19 px).
-    // Two lines stacked, vertically centred with a small inter-line gap.
-    const int16_t line_h   = 19;
-    const int16_t gap      = 2;
-    const int16_t total_h  = (int16_t)(line_h * 2 + gap);
-    const int16_t y_top    = (int16_t)((BSP_LCD_HEIGHT - total_h) / 2);
-    const int16_t y_bottom = (int16_t)(y_top + line_h + gap);
-
-    ESP_ERROR_CHECK(bsp_lcd_clear(BSP_LCD_BLACK));
-    ESP_ERROR_CHECK(bsp_lcd_draw_text_centered(y_top, FONT_LARGE,
-                                               "Welcome",
-                                               BSP_LCD_WHITE, BSP_LCD_BLACK));
-    ESP_ERROR_CHECK(bsp_lcd_draw_text_centered(y_bottom, FONT_LARGE,
-                                               APP_VERSION_STR,
-                                               BSP_LCD_GREEN, BSP_LCD_BLACK));
-}
+#define APP_VERSION_STR  "v0.0.7"
 
 static esp_err_t init_nvs(void)
 {
@@ -51,127 +35,163 @@ static esp_err_t init_nvs(void)
     return ret;
 }
 
-static esp_err_t phase5_wifi_smoke_test(void)
+static void startup_error_loop(void)
 {
-    ESP_LOGI(TAG, "Phase 5 Wi-Fi smoke test: FATFS wifi.cfg/NVS -> STA");
-
-    esp_err_t ret = init_nvs();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "NVS init failed: %s", esp_err_to_name(ret));
-        return ret;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
+}
 
-    ret = sd_owner_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "sd_owner_init failed: %s", esp_err_to_name(ret));
-        return ret;
+static void startup_error(ui_screen_t screen, const char *message, esp_err_t err)
+{
+    if (message != NULL) {
+        ESP_LOGE(TAG, "%s: %s", message, esp_err_to_name(err));
     }
+    ui_state_show(screen);
+    startup_error_loop();
+}
 
-    ret = sd_owner_switch_to_fatfs();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "sd_owner_switch_to_fatfs failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
+static void load_wifi_credentials(wifi_creds_t *creds,
+                                  wifi_creds_source_t *source)
+{
+    *source = WIFI_CREDS_NONE;
 
-    ESP_LOGI(TAG, "FATFS mounted: total=%" PRIu64 " free=%" PRIu64,
-             sd_fatfs_get_total_bytes(), sd_fatfs_get_free_bytes());
-
-    wifi_creds_t creds = {0};
-    wifi_creds_source_t source = WIFI_CREDS_NONE;
-
-    ret = wifi_cfg_read_from_sd(&creds);
+    esp_err_t ret = wifi_cfg_read_from_sd(creds);
     if (ret == ESP_OK) {
-        source = WIFI_CREDS_FROM_FILE;
-        ESP_LOGI(TAG, "Using credentials from /sdcard/wifi.cfg");
-    } else if (ret == ESP_ERR_NOT_FOUND) {
-        ret = wifi_cfg_read_from_nvs(&creds);
-        if (ret == ESP_OK) {
-            source = WIFI_CREDS_FROM_NVS;
-            ESP_LOGI(TAG, "Using credentials from NVS");
-        } else if (ret == ESP_ERR_NOT_FOUND) {
-            ret = wifi_cfg_create_default();
-            if (ret == ESP_OK) {
-                ESP_LOGW(TAG, "Created /sdcard/wifi.cfg; fill it and reboot");
-                return ESP_ERR_NOT_FOUND;
-            }
-            ESP_LOGE(TAG, "Failed to create default wifi.cfg: %s",
-                     esp_err_to_name(ret));
-            return ret;
-        } else {
-            ESP_LOGE(TAG, "wifi_cfg_read_from_nvs failed: %s", esp_err_to_name(ret));
-            return ret;
-        }
+        *source = WIFI_CREDS_FROM_FILE;
+        ESP_LOGI(TAG, "Using wifi.cfg from SD");
+        return;
+    }
+
+    if (ret != ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "wifi.cfg invalid: %s", esp_err_to_name(ret));
+        ui_state_show(UI_BOOT_CONFIG_INVALID);
+        startup_error_loop();
+    }
+
+    ret = wifi_cfg_read_from_nvs(creds);
+    if (ret == ESP_OK) {
+        *source = WIFI_CREDS_FROM_NVS;
+        ESP_LOGI(TAG, "Using credentials from NVS");
+        return;
+    }
+
+    if (ret != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "NVS credentials unavailable: %s", esp_err_to_name(ret));
+    }
+
+    ret = wifi_cfg_create_default();
+    if (ret == ESP_OK) {
+        ESP_LOGW(TAG, "Created /sdcard/wifi.cfg; fill it and reboot");
+        ui_state_show(UI_BOOT_CONFIG_CREATED);
     } else {
-        ESP_LOGE(TAG, "/sdcard/wifi.cfg is invalid: %s", esp_err_to_name(ret));
-        return ret;
+        ESP_LOGE(TAG, "Failed to create default wifi.cfg: %s",
+                 esp_err_to_name(ret));
+        ui_state_show(UI_BOOT_CONFIG_INVALID);
     }
 
-    ret = wifi_mgr_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "wifi_mgr_init failed: %s", esp_err_to_name(ret));
-        return ret;
+    startup_error_loop();
+}
+
+static void persist_file_credentials(const wifi_creds_t *creds,
+                                     wifi_creds_source_t source)
+{
+    if (source != WIFI_CREDS_FROM_FILE) {
+        return;
     }
 
-    ret = wifi_mgr_connect(&creds, 15000);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "wifi_mgr_connect failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    wifi_status_t status = {0};
-    wifi_mgr_get_status(&status);
-    ESP_LOGI(TAG, "Wi-Fi connected: ssid='%s' ip=%s rssi=%d",
-             status.ssid, status.ip_str, status.rssi);
-
-    if (source == WIFI_CREDS_FROM_FILE) {
-        ret = wifi_cfg_save_to_nvs(&creds);
-        if (ret == ESP_OK) {
-            ret = wifi_cfg_delete_from_sd();
-            if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to delete wifi.cfg after NVS save: %s",
-                         esp_err_to_name(ret));
-            }
-        } else {
-            ESP_LOGW(TAG, "Failed to save credentials to NVS: %s",
+    esp_err_t ret = wifi_cfg_save_to_nvs(creds);
+    if (ret == ESP_OK) {
+        ret = wifi_cfg_delete_from_sd();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to delete wifi.cfg after NVS save: %s",
                      esp_err_to_name(ret));
         }
+        return;
     }
 
-    return ESP_OK;
+    ESP_LOGW(TAG, "Failed to save credentials to NVS, keeping wifi.cfg: %s",
+             esp_err_to_name(ret));
+    ui_led_set_special_yellow();
 }
 
 void app_main(void)
 {
     ESP_LOGI(TAG, "boot " APP_VERSION_STR);
 
-    // Phase 1 BSP bring-up: LED + LCD.
-    ESP_ERROR_CHECK(bsp_led_init());
-    ESP_ERROR_CHECK(bsp_lcd_init());
+    ESP_ERROR_CHECK(init_nvs());
+    ui_state_init();
+    ui_led_init();
+    ui_state_show(UI_BOOT_WELCOME);
 
-    phase1_welcome_screen();
+    ESP_ERROR_CHECK(usb_msc_init());
+    usb_msc_set_media_present(false);
 
-    // Spec §12.1 calls for "LED solid green" briefly after a successful
-    // boot. Phase 1's deliverable is exactly that — hold it for 2 seconds
-    // so anyone glancing at the dongle can see firmware is alive.
-    ESP_ERROR_CHECK(bsp_led_set_rgb(0, 255, 0));
+    esp_err_t ret = webfs_mount();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Web UI partition mount failed: %s", esp_err_to_name(ret));
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(1500));
+
+    ret = sd_owner_init();
+    if (ret != ESP_OK) {
+        startup_error(UI_ERROR_GENERIC, "sd_owner_init failed", ret);
+    }
+
+    ret = sd_owner_switch_to_fatfs();
+    if (ret != ESP_OK) {
+        startup_error(UI_ERROR_SD, "SD card not detected", ret);
+    }
+
+    const uint64_t total = sd_fatfs_get_total_bytes();
+    const uint64_t free = sd_fatfs_get_free_bytes();
+    ui_state_update_memory(total, free);
+    ui_state_show(UI_BOOT_SD_MEMORY);
     vTaskDelay(pdMS_TO_TICKS(2000));
-    ESP_ERROR_CHECK(bsp_led_off());
 
-    esp_err_t ret = phase5_wifi_smoke_test();
+    wifi_creds_t creds = {0};
+    wifi_creds_source_t source = WIFI_CREDS_NONE;
+    load_wifi_credentials(&creds, &source);
+
+    ui_state_update_wifi(creds.ssid, "");
+    ui_state_show(UI_BOOT_CONNECTING);
+
+    ret = wifi_mgr_init();
+    if (ret != ESP_OK) {
+        startup_error(UI_ERROR_GENERIC, "wifi_mgr_init failed", ret);
+    }
+
+    ret = wifi_mgr_connect(&creds, 15000);
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "Phase 5 bring-up done; idling");
-        ESP_ERROR_CHECK(bsp_led_set_rgb(0, 255, 0));
-    } else {
-        ESP_LOGE(TAG, "Phase 5 bring-up failed: %s", esp_err_to_name(ret));
-        ESP_ERROR_CHECK(bsp_led_set_rgb(255, 0, 0));
+        wifi_status_t status = {0};
+        wifi_mgr_get_status(&status);
+        ui_state_update_wifi(status.ssid, status.ip_str);
+        ESP_LOGI(TAG, "Wi-Fi connected: ssid='%s' ip=%s rssi=%d",
+                 status.ssid, status.ip_str, status.rssi);
+
+        persist_file_credentials(&creds, source);
+
+        ret = http_server_start();
+        if (ret != ESP_OK) {
+            startup_error(UI_ERROR_GENERIC, "http_server_start failed", ret);
+        }
+
+        ui_state_show(UI_MODE_HTTP);
+        ESP_LOGI(TAG, "Startup complete: HTTP mode");
+        return;
     }
 
-    // Heartbeat log so a serial monitor still confirms liveness even when
-    // the screen is steady. Will be replaced by the real state machine in
-    // later phases.
-    uint32_t tick = 0;
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        ESP_LOGI(TAG, "alive tick=%" PRIu32, ++tick);
+    ESP_LOGW(TAG, "Wi-Fi connect failed, falling back to USB mode: %s",
+             esp_err_to_name(ret));
+    ui_state_show(UI_BOOT_CONNECT_FAILED);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    ret = sd_owner_switch_to_msc();
+    if (ret != ESP_OK) {
+        startup_error(UI_ERROR_GENERIC, "sd_owner_switch_to_msc failed", ret);
     }
+
+    ui_state_show(UI_MODE_USB);
+    ESP_LOGI(TAG, "Startup complete: USB mode");
 }

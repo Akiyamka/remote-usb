@@ -26,8 +26,13 @@ podman pull docker.io/espressif/idf:release-v5.3
 ./tools/idf set-target esp32s3
 ./tools/idf build
 
-# Flashing & monitoring (replace the device path as needed):
-./tools/idf -p /dev/ttyACM1 flash monitor
+# Flashing (replace the device path as needed):
+./tools/idf -p /dev/ttyACM1 flash
+
+# Then unplug/replug the dongle, or press its reset button, and attach without
+# another DTR/RTS reset. On ESP32-S3 USB-Serial-JTAG, monitor's default reset
+# can leave the chip in ROM download mode (boot:0x22).
+./tools/idf -p /dev/ttyACM1 monitor --no-reset
 
 # Menuconfig (interactive ncurses UI — works thanks to -it in the wrapper)
 ./tools/idf menuconfig
