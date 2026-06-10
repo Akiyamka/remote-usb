@@ -931,6 +931,8 @@ const char* webfs_root(void) { return MOUNT; }
 
 ```c
 // http_static.c — static asset handler
+#define STATIC_CHUNK_SIZE  1024
+
 esp_err_t handle_static(httpd_req_t *req)
 {
     // URI → file mapping. "/" → "/index.html"
@@ -953,18 +955,39 @@ esp_err_t handle_static(httpd_req_t *req)
     httpd_resp_set_type(req, content_type_from_ext(uri));  // text/html, application/javascript, ...
     if (gzipped) httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-    char buf[2048];
+    char *buf = malloc(STATIC_CHUNK_SIZE);
+    if (!buf) {
+        fclose(f);
+        return send_500(req, "no_mem");
+    }
+
     size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+    while ((n = fread(buf, 1, STATIC_CHUNK_SIZE, f)) > 0) {
         if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+            free(buf);
             fclose(f);
             return ESP_FAIL;
         }
     }
+    free(buf);
     fclose(f);
     httpd_resp_send_chunk(req, NULL, 0);  // end of response
     return ESP_OK;
 }
+```
+
+Do not keep the static streaming buffer on the HTTP server task stack. On the
+ESP32-S3 build used here, a stack-local buffer around 2 KB plus LittleFS and
+HTTPD call frames caused `curl --compressed /` to reset the connection and the
+device to reboot. Allocate the file chunk buffer from heap and keep the chunk
+size modest (1 KB is enough for LittleFS static assets). The HTTPD task stack
+should also be configured explicitly to 8 KiB in `httpd_config_t`:
+
+```c
+httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+config.max_open_sockets = 4;
+config.max_uri_handlers = 16;
+config.stack_size = 8192;
 ```
 
 ---

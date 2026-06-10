@@ -16,7 +16,7 @@
 
 static const char *TAG = "ui_state";
 
-#define APP_VERSION_STR  "v0.0.8"
+#define APP_VERSION_STR  "v0.0.9"
 
 static char s_ssid[33];
 static char s_ip[16];
