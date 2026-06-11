@@ -20,7 +20,10 @@ esp_err_t http_api_status_init(void);
 esp_err_t http_handle_api_status(httpd_req_t *req);
 esp_err_t http_handle_mode_usb(httpd_req_t *req);
 esp_err_t http_handle_mode_http(httpd_req_t *req);
-esp_err_t http_handle_files_stub(httpd_req_t *req);
+esp_err_t http_handle_files_get(httpd_req_t *req);
+esp_err_t http_handle_files_post(httpd_req_t *req);
+esp_err_t http_handle_files_delete(httpd_req_t *req);
+esp_err_t http_handle_mkdir_post(httpd_req_t *req);
 esp_err_t http_handle_static(httpd_req_t *req);
 
 bool http_upload_in_progress(void);
@@ -42,6 +45,8 @@ esp_err_t http_send_503_mode_mismatch(httpd_req_t *req,
 esp_err_t http_send_507(httpd_req_t *req, uint64_t free_mb);
 
 esp_err_t http_json_escape(const char *src, char *dst, size_t dst_size);
+esp_err_t http_decode_and_validate_path(const char *encoded_path, char *out,
+                                        size_t out_size, bool allow_empty);
 esp_err_t http_extract_and_validate_path(const char *uri, const char *prefix,
                                          char *out, size_t out_size);
 

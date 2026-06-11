@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "http_api_status.c"
+        "http_api_files.c"
         "http_server.c"
         "http_static.c"
         "http_util.c"

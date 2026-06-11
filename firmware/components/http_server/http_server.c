@@ -63,22 +63,22 @@ esp_err_t http_server_start(void)
     const httpd_uri_t files_get = {
         .uri = "/api/files*",
         .method = HTTP_GET,
-        .handler = http_handle_files_stub,
+        .handler = http_handle_files_get,
     };
     const httpd_uri_t files_post = {
         .uri = "/api/files*",
         .method = HTTP_POST,
-        .handler = http_handle_files_stub,
+        .handler = http_handle_files_post,
     };
     const httpd_uri_t files_delete = {
         .uri = "/api/files*",
         .method = HTTP_DELETE,
-        .handler = http_handle_files_stub,
+        .handler = http_handle_files_delete,
     };
     const httpd_uri_t mkdir_post = {
         .uri = "/api/mkdir*",
         .method = HTTP_POST,
-        .handler = http_handle_files_stub,
+        .handler = http_handle_mkdir_post,
     };
     const httpd_uri_t static_get = {
         .uri = "/*",

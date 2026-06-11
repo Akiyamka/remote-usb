@@ -178,13 +178,3 @@ esp_err_t http_handle_mode_http(httpd_req_t *req)
     ui_state_show(UI_MODE_HTTP);
     return http_send_200_mode(req, "http", false);
 }
-
-esp_err_t http_handle_files_stub(httpd_req_t *req)
-{
-    const sd_owner_t owner = sd_owner_current();
-    if (owner != SD_OWNER_FATFS) {
-        return http_send_503_mode_mismatch(req, mode_from_owner(owner));
-    }
-
-    return http_send_501(req);
-}

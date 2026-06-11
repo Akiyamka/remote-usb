@@ -42,12 +42,19 @@ static esp_err_t url_decode(const char *src, char *dst, size_t dst_size)
         }
 
         if (src[in] == '%') {
+            if (src[in + 1] == '\0' || src[in + 2] == '\0') {
+                return ESP_ERR_INVALID_ARG;
+            }
             const int hi = hex_value(src[in + 1]);
             const int lo = hex_value(src[in + 2]);
             if (hi < 0 || lo < 0) {
                 return ESP_ERR_INVALID_ARG;
             }
-            dst[out++] = (char)((hi << 4) | lo);
+            const char decoded = (char)((hi << 4) | lo);
+            if (decoded == '\0') {
+                return ESP_ERR_INVALID_ARG;
+            }
+            dst[out++] = decoded;
             in += 2;
             continue;
         }
@@ -223,6 +230,59 @@ esp_err_t http_send_507(httpd_req_t *req, uint64_t free_mb)
     return http_send_json(req, HTTPD_507, json);
 }
 
+esp_err_t http_decode_and_validate_path(const char *encoded_path, char *out,
+                                        size_t out_size, bool allow_empty)
+{
+    if (encoded_path == NULL || out == NULL || out_size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char decoded[256];
+    esp_err_t ret = url_decode(encoded_path, decoded, sizeof(decoded));
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    const size_t len = strlen(decoded);
+    if (len == 0) {
+        if (!allow_empty) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        out[0] = '\0';
+        return ESP_OK;
+    }
+
+    if (len >= out_size || decoded[0] == '/' ||
+        decoded[len - 1] == '/' || strstr(decoded, "..") != NULL ||
+        strstr(decoded, "//") != NULL || strchr(decoded, '\\') != NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *component = decoded;
+    while (*component != '\0') {
+        const char *slash = strchr(component, '/');
+        const size_t component_len = slash != NULL ?
+            (size_t)(slash - component) : strlen(component);
+        if (component_len == 0 ||
+            (component_len == 1 && component[0] == '.')) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (slash == NULL) {
+            break;
+        }
+        component = slash + 1;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        if ((unsigned char)decoded[i] < 0x20) {
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+
+    memcpy(out, decoded, len + 1);
+    return ESP_OK;
+}
+
 esp_err_t http_extract_and_validate_path(const char *uri, const char *prefix,
                                          char *out, size_t out_size)
 {
@@ -235,30 +295,16 @@ esp_err_t http_extract_and_validate_path(const char *uri, const char *prefix,
         return ESP_ERR_INVALID_ARG;
     }
 
-    char decoded[256];
-    esp_err_t ret = url_decode(uri + prefix_len, decoded, sizeof(decoded));
-    if (ret != ESP_OK) {
-        return ret;
+    const char *path = uri + prefix_len;
+    const char *query = strchr(path, '?');
+    const size_t path_len = query != NULL ? (size_t)(query - path) :
+        strlen(path);
+    char encoded_path[256];
+    if (path_len >= sizeof(encoded_path)) {
+        return ESP_ERR_NO_MEM;
     }
 
-    char *query = strchr(decoded, '?');
-    if (query != NULL) {
-        *query = '\0';
-    }
-
-    const size_t len = strlen(decoded);
-    if (len == 0 || len >= out_size || decoded[0] == '/' ||
-        decoded[len - 1] == '/' || strstr(decoded, "..") != NULL ||
-        strstr(decoded, "//") != NULL || strchr(decoded, '\\') != NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    for (size_t i = 0; i < len; i++) {
-        if ((unsigned char)decoded[i] < 0x20) {
-            return ESP_ERR_INVALID_ARG;
-        }
-    }
-
-    memcpy(out, decoded, len + 1);
-    return ESP_OK;
+    memcpy(encoded_path, path, path_len);
+    encoded_path[path_len] = '\0';
+    return http_decode_and_validate_path(encoded_path, out, out_size, false);
 }
