@@ -408,14 +408,14 @@ components/ui/
                           main
                             │
         ┌───────────┬───────┼────────┬─────────┬──────────┐
-        ▼           ▼       ▼        ▼         ▼          ▼
+        ▼          ▼      ▼       ▼        ▼         ▼
     wifi_mgr   http_server  ui    sd_owner   usb_msc   webfs
         │           │       │        │         │          │
-        │           ▼       ▼        ▼         ▼          │
+        │           ▼      ▼       ▼        ▼         │
         │         (uses)  bsp_lcd  sd_raw   tinyusb       │
-        │                 bsp_led  sd_fatfs                │
-        ▼                                                  │
-   esp_wifi/nvs                                         littlefs
+        │                 bsp_led  sd_fatfs               │
+        ▼                                                │
+   esp_wifi/nvs                                        littlefs
 ```
 
 **Initialization order in `app_main` (fixed by §14):**
