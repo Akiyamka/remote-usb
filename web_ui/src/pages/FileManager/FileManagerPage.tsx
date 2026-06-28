@@ -49,6 +49,9 @@ export function FileManagerPage() {
         event.preventDefault();
         setIsDraggingFiles(false);
         const files = Array.from(event.dataTransfer?.files ?? []);
+        if (files.length > 0) {
+          fileManager.$isUploadModalOpen.value = true;
+        }
         void fileManager.uploadFilesToDevice(files, fileManager.$currentPath.value);
       }}
     >

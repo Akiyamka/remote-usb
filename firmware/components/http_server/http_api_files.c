@@ -9,7 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include "esp_log.h"
 #include "sd_fatfs.h"
@@ -21,6 +23,8 @@ static const char *TAG = "http_files";
 #define REL_PATH_MAX          256
 #define FILE_IO_CHUNK_SIZE    4096
 #define LIST_ENTRY_JSON_MAX   768
+#define UPLOAD_MTIME_HEADER   "X-File-MTime"
+#define TIMEZONE_OFFSET_HEADER "X-Timezone-Offset"
 
 static const char *mode_from_owner(sd_owner_t owner)
 {
@@ -226,6 +230,99 @@ static esp_err_t send_ok(httpd_req_t *req)
     return http_send_json(req, "200 OK", "{\"ok\":true}");
 }
 
+static esp_err_t apply_request_timezone(httpd_req_t *req)
+{
+    const size_t value_len = httpd_req_get_hdr_value_len(req,
+                                                         TIMEZONE_OFFSET_HEADER);
+    if (value_len == 0) {
+        return ESP_OK;
+    }
+    if (value_len >= 16) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char value[16];
+    esp_err_t ret = httpd_req_get_hdr_value_str(req, TIMEZONE_OFFSET_HEADER,
+                                                value, sizeof(value));
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    errno = 0;
+    char *end = NULL;
+    const long parsed = strtol(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed < -14 * 60 ||
+        parsed > 14 * 60) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const int offset_minutes = (int)parsed;
+    const int abs_minutes = abs(offset_minutes);
+    const char sign = offset_minutes >= 0 ? '+' : '-';
+    char tz[16];
+    const int written = snprintf(tz, sizeof(tz), "UTC%c%d:%02d", sign,
+                                 abs_minutes / 60, abs_minutes % 60);
+    if (written < 0 || written >= (int)sizeof(tz)) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (setenv("TZ", tz, 1) != 0) {
+        return ESP_FAIL;
+    }
+    tzset();
+    return ESP_OK;
+}
+
+static esp_err_t extract_upload_mtime(httpd_req_t *req, time_t *mtime,
+                                      bool *has_mtime)
+{
+    *has_mtime = false;
+
+    const size_t value_len = httpd_req_get_hdr_value_len(req,
+                                                         UPLOAD_MTIME_HEADER);
+    if (value_len == 0) {
+        return ESP_OK;
+    }
+    if (value_len >= 32) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char value[32];
+    esp_err_t ret = httpd_req_get_hdr_value_str(req, UPLOAD_MTIME_HEADER,
+                                                value, sizeof(value));
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    errno = 0;
+    char *end = NULL;
+    const long long parsed = strtoll(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed <= 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const time_t converted = (time_t)parsed;
+    if ((long long)converted != parsed) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *mtime = converted;
+    *has_mtime = true;
+    return ESP_OK;
+}
+
+static void try_set_file_mtime(const char *full_path, time_t mtime)
+{
+    const struct utimbuf times = {
+        .actime = mtime,
+        .modtime = mtime,
+    };
+
+    if (utime(full_path, &times) != 0) {
+        ESP_LOGW(TAG, "utime %s failed: errno=%d", full_path, errno);
+    }
+}
+
 static esp_err_t send_chunk_literal(httpd_req_t *req, const char *chunk)
 {
     return httpd_resp_send_chunk(req, chunk, HTTPD_RESP_USE_STRLEN);
@@ -236,6 +333,11 @@ static esp_err_t handle_file_list(httpd_req_t *req)
     esp_err_t ret = require_http_mode(req);
     if (ret != ESP_OK) {
         return ret;
+    }
+
+    ret = apply_request_timezone(req);
+    if (ret != ESP_OK) {
+        return http_send_400(req, "invalid_timezone");
     }
 
     char rel_path[REL_PATH_MAX];
@@ -447,6 +549,18 @@ static esp_err_t handle_file_upload(httpd_req_t *req)
         return http_send_500(req, "mkdir_failed");
     }
 
+    ret = apply_request_timezone(req);
+    if (ret != ESP_OK) {
+        return http_send_400(req, "invalid_timezone");
+    }
+
+    bool has_upload_mtime = false;
+    time_t upload_mtime = 0;
+    ret = extract_upload_mtime(req, &upload_mtime, &has_upload_mtime);
+    if (ret != ESP_OK) {
+        return http_send_400(req, "invalid_mtime");
+    }
+
     const size_t content_len = req->content_len;
     const uint64_t free_bytes = sd_fatfs_get_free_bytes();
     if (content_len > free_bytes) {
@@ -513,6 +627,10 @@ cleanup:
         error = "upload_failed";
     }
 
+    if (result == ESP_OK && has_upload_mtime) {
+        try_set_file_mtime(full_path, upload_mtime);
+    }
+
     http_set_upload_in_progress(false);
 
     if (result != ESP_OK) {
@@ -537,6 +655,11 @@ static esp_err_t handle_file_delete(httpd_req_t *req)
                                          sizeof(rel_path));
     if (ret != ESP_OK) {
         return http_send_400(req, "invalid_path");
+    }
+
+    ret = apply_request_timezone(req);
+    if (ret != ESP_OK) {
+        return http_send_400(req, "invalid_timezone");
     }
 
     char full_path[FILE_PATH_MAX];

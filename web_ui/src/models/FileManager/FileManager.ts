@@ -224,6 +224,7 @@ export class FileManager {
         await this.rpc.uploadFile([...pathDescriptor, file.name], file, {
           signal: controller.signal,
           contentType: file.type || undefined,
+          mtime: Math.floor(file.lastModified / 1000),
           onProgress: ({ loaded, total, percent }) => {
             const resolvedTotal = total ?? file.size;
             this.updateUploadTask(task.id, (currentTask) => ({

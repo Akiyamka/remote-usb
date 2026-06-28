@@ -80,6 +80,8 @@ export type UploadFileOptions = {
   onProgress?: (progress: UploadProgress) => void;
   signal?: AbortSignal;
   contentType?: string;
+  /** Last modification time as Unix timestamp in seconds. */
+  mtime?: number;
 };
 
 export type RPCOptions = {
@@ -91,6 +93,8 @@ export type RPCOptions = {
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 type DeviceSubscriber = (message: DeviceLiveMessage) => void;
+
+const timezoneOffsetHeader = 'X-Timezone-Offset';
 
 export type DeviceErrorCode = 'ConnectionLost';
 
@@ -318,6 +322,7 @@ export class RPC implements RPCAPI {
     if (!headers.has('Accept')) {
       headers.set('Accept', 'application/json');
     }
+    headers.set(timezoneOffsetHeader, String(new Date().getTimezoneOffset()));
 
     return {
       ...init,
@@ -393,6 +398,10 @@ export class RPC implements RPCAPI {
       xhr.open('POST', this.url(path), true);
       xhr.setRequestHeader('Accept', 'application/json');
       xhr.setRequestHeader('Content-Type', options.contentType ?? 'application/octet-stream');
+      xhr.setRequestHeader(timezoneOffsetHeader, String(new Date().getTimezoneOffset()));
+      if (options.mtime !== undefined && Number.isFinite(options.mtime) && options.mtime > 0) {
+        xhr.setRequestHeader('X-File-MTime', String(Math.floor(options.mtime)));
+      }
 
       xhr.upload.onprogress = ({ lengthComputable, loaded, total }) => {
         const totalBytes = lengthComputable ? total : null;

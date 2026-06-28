@@ -1,19 +1,21 @@
 .root {
   background: transparent;
-  height: 4px;
+  height: 6px;
   overflow: hidden;
   width: 100%;
+  top: -3px;
+  position: relative;
 }
 
 .bar {
-  height: 2px;
+  height: 4px;
   position: relative;
   width: 12%;
 }
 
 .active .bar {
   animation: loading 1s linear infinite;
-  background-color: black;
+  background-color: var(--accent-bg-color);
 }
 
 @keyframes loading {

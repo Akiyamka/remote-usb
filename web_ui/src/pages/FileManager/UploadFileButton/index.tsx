@@ -61,6 +61,11 @@ export function UploadFileButton() {
         title={t("upload.uploadFiles")}
         type="button"
         onClick={() => {
+          if (overallProgress.isActive) {
+            fileManager.$isUploadModalOpen.value = true;
+            return;
+          }
+
           inputRef.current?.click();
         }}
       >

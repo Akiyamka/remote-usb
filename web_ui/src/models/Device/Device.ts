@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals';
+import { t } from '../../i18n.js';
 import { DeviceError, type DeviceInfo, type DeviceMode, type RPCAPI } from '../../RPCAPI';
 
 export class Device {
@@ -55,23 +56,23 @@ export class Device {
 
   private async waitBeforeReconnect(delayMs: number): Promise<void> {
     if (delayMs === 0) {
-      this.$errorMessage.value = 'Connection lost. Reconnecting...';
+      this.$errorMessage.value = t('app.connectionLostReconnecting');
       return;
     }
 
     let remainingMs = delayMs;
 
     while (remainingMs > 0) {
-      this.$errorMessage.value = `Connection lost. Reconnecting in ${Math.ceil(
-        remainingMs / 1_000,
-      )}s`;
+      this.$errorMessage.value = t('app.connectionLostReconnectingIn', {
+        seconds: Math.ceil(remainingMs / 1_000),
+      });
 
       const stepMs = Math.min(remainingMs, 1_000);
       await this.delay(stepMs);
       remainingMs -= stepMs;
     }
 
-    this.$errorMessage.value = 'Connection lost. Reconnecting...';
+    this.$errorMessage.value = t('app.connectionLostReconnecting');
   }
 
   private nextReconnectDelay(currentDelayMs: number): number {
