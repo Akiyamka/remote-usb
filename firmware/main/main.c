@@ -3,6 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "app_version.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -18,11 +19,6 @@
 #include "wifi_mgr.h"
 
 static const char *TAG = "main";
-
-// Firmware revision banner shown on the welcome screen. Bumped alongside
-// each spec/plan revision so we can verify on the LCD which build is
-// actually flashed onto the device.
-#define APP_VERSION_STR  "v0.0.11"
 
 static esp_err_t init_nvs(void)
 {
@@ -117,7 +113,7 @@ static bool persist_file_credentials(const wifi_creds_t *creds,
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "boot " APP_VERSION_STR);
+    ESP_LOGI(TAG, "boot " APP_VERSION_DISPLAY);
 
     ESP_ERROR_CHECK(init_nvs());
     ui_state_init();

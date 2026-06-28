@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-set(PROJECT_VER "0.0.10")
+include(${CMAKE_CURRENT_LIST_DIR}/version.cmake)
 project(remote_usb)
 
 littlefs_create_partition_image(webfs web_dist FLASH_IN_PROJECT)

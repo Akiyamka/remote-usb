@@ -1,0 +1,2 @@
+set(APP_VERSION "0.0.11")
+set(PROJECT_VER "${APP_VERSION}")

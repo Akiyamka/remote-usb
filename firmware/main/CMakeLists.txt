@@ -7,6 +7,7 @@ idf_component_register(
         storage
         ui
         usb_msc
+        version
         webfs
         wifi_mgr
 )

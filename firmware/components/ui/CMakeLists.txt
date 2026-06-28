@@ -4,5 +4,7 @@ idf_component_register(
         "ui_led.c"
     INCLUDE_DIRS "include"
     REQUIRES bsp
-    PRIV_REQUIRES freertos
+    PRIV_REQUIRES
+        freertos
+        version
 )

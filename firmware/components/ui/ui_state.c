@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "app_version.h"
 #include "bsp_lcd.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -17,8 +18,6 @@
 #include "ui_led.h"
 
 static const char *TAG = "ui_state";
-
-#define APP_VERSION_STR  "v0.0.10"
 
 static char s_ssid[33];
 static char s_ip[16];
@@ -203,7 +202,7 @@ static void draw_screen(ui_screen_t screen)
     case UI_BOOT_WELCOME:
         draw_centered_fit(4, FONT_DELICATUS_16, "Welcome", BSP_LCD_WHITE);
         draw_centered_fit(30, FONT_CAIROPIXEL_32,
-                          APP_VERSION_STR, BSP_LCD_GREEN);
+                          APP_VERSION_DISPLAY, BSP_LCD_GREEN);
         break;
 
     case UI_BOOT_SD_MEMORY:

@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#define APP_VERSION          "@APP_VERSION@"
+#define APP_VERSION_DISPLAY  "v" APP_VERSION
