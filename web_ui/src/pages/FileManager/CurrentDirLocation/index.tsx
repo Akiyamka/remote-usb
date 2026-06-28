@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { fileManager } from '../../../appState.js';
-import { ArrowUpIcon, CheckIcon, CloseIcon, EditIcon, HomeIcon } from '../icons.jsx';
+import { ArrowUpIcon, CheckIcon, CloseIcon, EditIcon, FolderPlusIcon, HomeIcon } from '../icons.jsx';
 import styles from './index.module.css';
 import sharedStyles from '../shared.module.css';
 
@@ -31,13 +31,13 @@ export function CurrentDirLocation() {
         disabled={currentPath.length === 0}
         title="Parent directory"
         type="button"
-        onClick={() => void fileManager.openDir(currentPath.slice(0, -1))}
+        onClick={openParentDirectory}
       >
         <ArrowUpIcon />
       </button>
 
       {isEditing ? (
-        <form class={styles['edit']} onSubmit={(event) => submitPath(event, editablePath, setIsEditing)}>
+        <form class={styles['edit']} onSubmit={(event) => void submitPath(event, editablePath, setIsEditing)}>
           <input
             aria-label="Current path"
             autoFocus
@@ -67,7 +67,7 @@ export function CurrentDirLocation() {
               class={sharedStyles['iconButton']}
               title="Root directory"
               type="button"
-              onClick={() => void fileManager.openDir([])}
+              onClick={() => openDirectory([])}
             >
               <HomeIcon size={18} />
             </button>
@@ -77,7 +77,7 @@ export function CurrentDirLocation() {
                 <button
                   title={currentPath.slice(0, index + 1).join('/')}
                   type="button"
-                  onClick={() => void fileManager.openDir(currentPath.slice(0, index + 1))}
+                  onClick={() => openDirectory(currentPath.slice(0, index + 1))}
                 >
                   {part}
                 </button>
@@ -93,23 +93,75 @@ export function CurrentDirLocation() {
           >
             <EditIcon />
           </button>
+          <button
+            aria-label="Create directory"
+            class={sharedStyles['iconButton']}
+            title="Create directory"
+            type="button"
+            onClick={() => createDirectoryPrompt(currentPath)}
+          >
+            <FolderPlusIcon />
+          </button>
         </>
       )}
     </div>
   );
 }
 
-function submitPath(
+function openParentDirectory() {
+  const currentPath = fileManager.$currentPath.value;
+  if (currentPath.length === 0) {
+    return;
+  }
+
+  openDirectory(currentPath.slice(0, -1));
+}
+
+function openDirectory(pathDescriptor: string[]) {
+  void fileManager.openDir(pathDescriptor);
+}
+
+async function submitPath(
   event: Event,
   editablePath: string,
   setIsEditing: (isEditing: boolean) => void,
 ) {
   event.preventDefault();
-  const nextPath = editablePath
+  const nextPath = parseEditablePath(editablePath);
+  if (nextPath === null) {
+    fileManager.pushError('Invalid path.');
+    return;
+  }
+
+  await fileManager.openDir(nextPath);
+  setIsEditing(false);
+}
+
+function parseEditablePath(value: string): string[] | null {
+  const nextPath = value
     .split('/')
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 
-  setIsEditing(false);
-  void fileManager.openDir(nextPath);
+  if (nextPath.some((part) => part === '.' || part.includes('..'))) {
+    return null;
+  }
+
+  return nextPath;
+}
+
+function createDirectoryPrompt(currentPath: string[]) {
+  const value = window.prompt('New directory path');
+  if (value === null) {
+    return;
+  }
+
+  const parts = parseEditablePath(value);
+
+  if (parts === null || parts.length === 0) {
+    fileManager.pushError('Invalid directory path.');
+    return;
+  }
+
+  void fileManager.createDirectory([...currentPath, ...parts]);
 }

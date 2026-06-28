@@ -110,6 +110,7 @@ export class RPCError extends Error {
   readonly statusText: string;
   readonly body: unknown;
   readonly code?: string;
+  readonly reason?: string;
 
   constructor(status: number, statusText: string, body?: unknown) {
     const code = RPCError.extractErrorCode(body);
@@ -126,6 +127,7 @@ export class RPCError extends Error {
     this.statusText = statusText;
     this.body = body;
     this.code = code;
+    this.reason = reason;
   }
 
   private static extractErrorCode(body: unknown): string | undefined {

@@ -1,15 +1,32 @@
-# `create-preact`
+# Web UI
 
-<h2 align="center">
-  <img height="256" width="256" src="./src/assets/preact.svg">
-</h2>
+Preact + Vite client for the ESP32-S3 wireless USB drive.
 
-<h3 align="center">Get started using Preact and Vite!</h3>
+## Development Mock
 
-## Getting Started
+`pnpm dev` starts Vite at `http://localhost:5173/` and serves an in-memory mock
+of the firmware HTTP API under the same `/api/*` paths used on the device.
 
--   `npm run dev` - Starts a dev server at http://localhost:5173/
+The mock includes:
 
--   `npm run build` - Builds for production, emitting to `dist/`
+- `/api/status`, `/api/mode/usb`, `/api/mode/http`
+- file listing, download, upload, delete, mkdir
+- sample folders: `gcode`, `images`, `docs`, `configs`, nested paths with spaces
+- sample files: `.gcode`, `.jpg`, `.svg`, `.pdf`, `.txt`, `.json`, `.csv`
 
--   `npm run preview` - Starts a server at http://localhost:4173/ to test production build locally
+```sh
+pnpm dev
+```
+
+## Build
+
+```sh
+pnpm build
+```
+
+To update the firmware LittleFS payload from the built UI, run from the repo
+root:
+
+```sh
+./build_webfs.sh
+```

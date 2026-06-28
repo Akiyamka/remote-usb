@@ -1,0 +1,79 @@
+.root {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.card {
+  border: 1px solid hsla(0, 0%, 0%, 0.15);
+  border-radius: 24px;
+  box-shadow: 0 24px 80px hsla(0, 0%, 0%, 0.12);
+  max-width: 560px;
+  padding: clamp(24px, 6vw, 48px);
+  text-align: left;
+}
+
+.card h1 {
+  font-size: clamp(2rem, 8vw, 4rem);
+  letter-spacing: -0.06em;
+  line-height: 0.92;
+  margin: 0 0 18px;
+}
+
+.card p {
+  color: hsla(0, 0%, 0%, 0.62);
+  margin: 0 0 20px;
+}
+
+.eyebrow {
+  color: hsl(216, 80%, 42%) !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.card button {
+  background: hsl(216, 84%, 48%);
+  border: 0;
+  border-radius: 999px;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 12px 18px;
+}
+
+.card button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.message {
+  color: hsl(0, 70%, 40%);
+  margin-top: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    border-color: hsla(0, 0%, 100%, 0.16);
+  }
+
+  .card p {
+    color: hsla(0, 0%, 100%, 0.68);
+  }
+
+  .eyebrow {
+    color: hsl(204, 100%, 68%) !important;
+  }
+
+  .message {
+    color: hsl(4, 100%, 75%);
+  }
+}

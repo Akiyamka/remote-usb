@@ -1,13 +1,12 @@
-import { useState } from 'preact/hooks';
 import { fileManager } from '../../../appState.js';
 import type { FileSystemEntry } from '../../../RPCAPI.js';
-import { formatFileSize, formatMTime } from '../../../utils/format.js';
+import { formatFileSize, formatMTime, formatRelativeMTime } from '../../../utils/format.js';
+import { encodePath } from '../../../utils/path.js';
 import { DownloadIcon, FileIcon, FolderIcon, MoreIcon, TrashIcon } from '../icons.jsx';
 import styles from './index.module.css';
 import sharedStyles from '../shared.module.css';
 
 export function DirectoryContent() {
-  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
   const currentPath = fileManager.$currentPath.value;
   const entries = [...fileManager.$currentList.value].sort(compareEntries);
 
@@ -17,9 +16,11 @@ export function DirectoryContent() {
 
   return (
     <div class={styles['content']} role="grid" aria-label="Directory content">
-      {entries.map((entry) => {
+      {entries.map((entry, index) => {
         const pathDescriptor = [...currentPath, entry.name];
         const menuKey = `${entry.type}:${pathDescriptor.join('/')}`;
+        const menuId = `entry-menu-${index}`;
+        const fullMTime = formatMTime(entry.mtime);
 
         return (
           <div
@@ -40,50 +41,57 @@ export function DirectoryContent() {
             <div class={styles['entryName']} role="gridcell" title={entry.name}>
               {entry.name}
             </div>
-            <div class={styles['entryMeta']} role="gridcell">
-              <span>{entry.type === 'file' ? formatFileSize(entry.sizeKb) : 'Folder'}</span>
-              <span>{formatMTime(entry.mtime)}</span>
+            <div class={styles['entrySize']} role="gridcell">
+              {entry.type === 'file' ? formatFileSize(entry.sizeKb) : 'Folder'}
             </div>
-            <div class={styles['entryActions']} role="gridcell">
+            <div class={styles['entryMTime']} role="gridcell" title={fullMTime}>
+              {formatRelativeMTime(entry.mtime)}
+            </div>
+            <div
+              class={styles['entryActions']}
+              role="gridcell"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
               <button
                 aria-label={`Actions for ${entry.name}`}
-                aria-expanded={openMenuKey === menuKey}
+                aria-haspopup="menu"
+                aria-controls={menuId}
                 class={sharedStyles['iconButton']}
+                popovertarget={menuId}
                 type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setOpenMenuKey(openMenuKey === menuKey ? null : menuKey);
-                }}
               >
                 <MoreIcon size={18} />
               </button>
-              {openMenuKey === menuKey && (
-                <div class={styles['entryMenu']} onClick={(event) => event.stopPropagation()}>
-                  {entry.type === 'file' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenMenuKey(null);
-                        void downloadEntry(pathDescriptor, entry.name);
-                      }}
-                    >
-                      <DownloadIcon size={16} />
-                      <span>Download</span>
-                    </button>
-                  )}
+              <div class={styles['entryMenu']} id={menuId} popover="auto" role="menu">
+                {entry.type === 'file' && (
                   <button
-                    class={styles['danger']}
+                    popovertarget={menuId}
+                    popovertargetaction="hide"
+                    role="menuitem"
                     type="button"
                     onClick={() => {
-                      setOpenMenuKey(null);
-                      void deleteEntry(entry, pathDescriptor);
+                      void downloadEntry(pathDescriptor, entry.name);
                     }}
                   >
-                    <TrashIcon size={16} />
-                    <span>Delete</span>
+                    <DownloadIcon size={16} />
+                    <span>Download</span>
                   </button>
-                </div>
-              )}
+                )}
+                <button
+                  class={styles['danger']}
+                  popovertarget={menuId}
+                  popovertargetaction="hide"
+                  role="menuitem"
+                  type="button"
+                  onClick={() => {
+                    void deleteEntry(entry, pathDescriptor);
+                  }}
+                >
+                  <TrashIcon size={16} />
+                  <span>Delete</span>
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -109,26 +117,14 @@ async function openEntry(entry: FileSystemEntry, pathDescriptor: string[]) {
     return;
   }
 
-  await openFileInNewTab(pathDescriptor, entry.name);
+  openFileInNewTab(pathDescriptor);
 }
 
-async function openFileInNewTab(pathDescriptor: string[], fileName: string) {
-  const openedWindow = window.open('about:blank', '_blank');
-
+function openFileInNewTab(pathDescriptor: string[]) {
   try {
-    const blob = await fileManager.downloadFileFromDevice(pathDescriptor);
-    const url = URL.createObjectURL(blob);
-
-    if (openedWindow !== null) {
-      openedWindow.document.title = fileName;
-      openedWindow.location.href = url;
-    } else {
-      window.open(url, '_blank');
-    }
-
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch {
-    openedWindow?.close();
+    window.open(`/api/files/${encodePath(pathDescriptor, false)}`, '_blank', 'noopener');
+  } catch (error) {
+    fileManager.pushError(error instanceof Error ? error.message : String(error));
   }
 }
 

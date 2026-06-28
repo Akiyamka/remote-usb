@@ -2,12 +2,15 @@ import { signal } from '@preact/signals';
 import { DeviceError, type DeviceInfo, type DeviceMode, type RPCAPI } from '../../RPCAPI';
 
 export class Device {
+  static readonly expectedApiVersion = 1;
+
   private static readonly reconnectBaseDelayMs = 1_000;
   private static readonly reconnectMaxDelayMs = 30_000;
 
   $currentMode = signal<DeviceMode>('switching');
   $isConnecting = signal<boolean>(false);
   $errorMessage = signal<string | null>(null);
+  $apiVersionMismatch = signal<{ expected: number; actual: number } | null>(null);
   $deviceInfo = signal<null | DeviceInfo>(null);
   rpc: RPCAPI;
 
@@ -27,6 +30,10 @@ export class Device {
         await this.rpc.subscribeToDevice(({ deviceInfo }) => {
           this.$deviceInfo.value = deviceInfo;
           this.$currentMode.value = deviceInfo.mode;
+          this.$apiVersionMismatch.value =
+            deviceInfo.api_version === Device.expectedApiVersion
+              ? null
+              : { expected: Device.expectedApiVersion, actual: deviceInfo.api_version };
         });
 
         this.$errorMessage.value = null;

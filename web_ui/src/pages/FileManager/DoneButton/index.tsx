@@ -20,11 +20,10 @@ export function DoneButton() {
     try {
       await device.toggleState();
     } catch (error) {
-      const reason = error instanceof RPCError && error.code !== undefined ? ` (${error.code})` : '';
       setMessage(
         fileManager.$hasTransferredFiles.value
-          ? `The device rejected the mode switch after file transfer${reason}. Try again in a moment.`
-          : `The device rejected the mode switch${reason}.`,
+          ? `${modeSwitchErrorMessage(error)} The transferred files are still on the SD card.`
+          : modeSwitchErrorMessage(error),
       );
     } finally {
       setIsSwitching(false);
@@ -39,4 +38,21 @@ export function DoneButton() {
       {message !== null && <div class={styles['message']}>{message}</div>}
     </div>
   );
+}
+
+function modeSwitchErrorMessage(error: unknown): string {
+  if (error instanceof RPCError && error.status === 409) {
+    if (error.reason === 'active_upload') {
+      return 'Uploads are still running.';
+    }
+    if (error.reason === 'host_io_active') {
+      return 'The USB host is still using the card. Try again after it goes idle.';
+    }
+    if (error.reason === 'switch_in_progress') {
+      return 'Another mode switch is already running. Try again in a moment.';
+    }
+    return 'The device is busy. Try again in a moment.';
+  }
+
+  return error instanceof Error ? error.message : String(error);
 }

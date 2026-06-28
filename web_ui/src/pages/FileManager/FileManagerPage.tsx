@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { CurrentDirLocation } from './CurrentDirLocation/index.jsx';
 import { DirectoryContent } from './DirectoryContent/index.jsx';
 import { DoneButton } from './DoneButton/index.js';
@@ -10,12 +10,43 @@ import styles from './FileManagerPage.module.css';
 import sharedStyles from './shared.module.css';
 
 export function FileManagerPage() {
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
   useEffect(() => {
     void fileManager.openLastDir();
   }, []);
 
   return (
-    <div class={styles['root']}>
+    <div
+      class={`${styles['root']} ${isDraggingFiles ? styles['dragging'] : ''}`}
+      onDragEnter={(event) => {
+        if (dragEventHasFiles(event)) {
+          event.preventDefault();
+          setIsDraggingFiles(true);
+        }
+      }}
+      onDragOver={(event) => {
+        if (dragEventHasFiles(event)) {
+          event.preventDefault();
+        }
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) {
+          setIsDraggingFiles(false);
+        }
+      }}
+      onDrop={(event) => {
+        if (!dragEventHasFiles(event)) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsDraggingFiles(false);
+        const files = Array.from(event.dataTransfer?.files ?? []);
+        void fileManager.uploadFilesToDevice(files, fileManager.$currentPath.value);
+      }}
+    >
+      {isDraggingFiles && <div class={styles['dropOverlay']}>Drop files to upload here</div>}
       <div class={styles['header']}>
         <CurrentDirLocation />
         <UploadFileButton />
@@ -44,4 +75,8 @@ export function FileManagerPage() {
       </div>
     </div>
   );
+}
+
+function dragEventHasFiles(event: { dataTransfer: DataTransfer | null }): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
 }

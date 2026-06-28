@@ -1,0 +1,42 @@
+.stack {
+  display: flex;
+  flex-flow: column nowrap;
+  gap: 8px;
+  left: 50%;
+  max-width: min(760px, calc(100vw - 24px));
+  position: fixed;
+  top: 12px;
+  transform: translateX(-50%);
+  width: max-content;
+  z-index: 50;
+}
+
+.banner {
+  background: hsla(215, 18%, 18%, 0.94);
+  border: 1px solid hsla(0, 0%, 100%, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 12px 32px hsla(0, 0%, 0%, 0.22);
+  color: white;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  padding: 10px 16px;
+}
+
+.warning {
+  background: hsl(42, 92%, 38%);
+}
+
+.error {
+  background: hsl(0, 66%, 37%);
+}
+
+@media (max-width: 640px) {
+  .stack {
+    align-items: stretch;
+    width: calc(100vw - 24px);
+  }
+
+  .banner {
+    border-radius: 14px;
+  }
+}

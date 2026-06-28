@@ -12,6 +12,7 @@
   margin: auto;
   max-height: 100vh;
   max-width: 1020px;
+  position: relative;
   text-align: left;
   width: min(1020px, calc(100vw - 32px));
 }
@@ -32,6 +33,11 @@
 .root button:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.dragging {
+  outline: 2px solid var(--progress-color);
+  outline-offset: -2px;
 }
 
 .header {
@@ -64,6 +70,24 @@
 .footer {
   border-top: 2px solid var(--line-color);
   padding: 16px 0;
+}
+
+.dropOverlay {
+  align-items: center;
+  background: hsla(132, 60%, 44%, 0.88);
+  border: 2px dashed hsla(0, 0%, 100%, 0.85);
+  border-radius: 18px;
+  color: white;
+  display: flex;
+  font-size: clamp(1.4rem, 5vw, 3rem);
+  font-weight: 800;
+  inset: 16px;
+  justify-content: center;
+  letter-spacing: -0.04em;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  z-index: 10;
 }
 
 @media (max-width: 700px) {

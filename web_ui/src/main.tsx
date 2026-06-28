@@ -15,22 +15,27 @@ export function App() {
       <main>
         <StatusOverlay />
         <Router>
-          <Route
-            path="/"
-            component={
-              device.$currentMode.value === 'http'
-                ? FileManagerPage
-                : device.$currentMode.value === 'usb'
-                  ? EmulationPage
-                  : InitialPage
-            }
-          />
+          <Route path="/" component={HomePage} />
           {/*<Route path="/settings" component={Settings} />*/}
           <Route default component={NotFound} />
         </Router>
       </main>
     </LocationProvider>
   );
+}
+
+function HomePage() {
+  const mode = device.$currentMode.value;
+
+  if (mode === 'http') {
+    return <FileManagerPage />;
+  }
+
+  if (mode === 'usb') {
+    return <EmulationPage />;
+  }
+
+  return <InitialPage />;
 }
 
 render(<App />, document.getElementById('app')!);

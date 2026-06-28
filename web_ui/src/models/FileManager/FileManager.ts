@@ -1,5 +1,5 @@
 import { batch, signal } from '@preact/signals';
-import type { FileSystemEntry, RPCAPI } from '../../RPCAPI';
+import { RPCError, type FileSystemEntry, type RPCAPI } from '../../RPCAPI';
 
 export type UploadStatus = 'queued' | 'uploading' | 'done' | 'failed' | 'cancelled';
 
@@ -136,6 +136,27 @@ export class FileManager {
         return;
       }
 
+      if (this.isSamePath(this.$currentPath.value, parentPath)) {
+        await this.openDir(parentPath);
+      }
+    } catch (error) {
+      this.pushError(this.errorToMessage(error));
+    } finally {
+      this.$isLoading.value = false;
+    }
+  }
+
+  async createDirectory(pathDescriptor: string[]) {
+    if (pathDescriptor.length === 0) {
+      this.pushError('Directory name is required.');
+      return;
+    }
+
+    this.$isLoading.value = true;
+
+    try {
+      await this.rpc.createDirectory(pathDescriptor);
+      const parentPath = pathDescriptor.slice(0, -1);
       if (this.isSamePath(this.$currentPath.value, parentPath)) {
         await this.openDir(parentPath);
       }
@@ -283,6 +304,26 @@ export class FileManager {
   }
 
   private errorToMessage(error: unknown): string {
+    if (error instanceof RPCError) {
+      if (error.status === 503 && error.code === 'mode_mismatch') {
+        return 'The SD card is in USB mode. Switch to HTTP mode first.';
+      }
+      if (error.status === 507) {
+        return 'The SD card does not have enough free space.';
+      }
+      if (error.status === 409) {
+        if (error.reason === 'active_upload') {
+          return 'An upload is already running.';
+        }
+        if (error.reason === 'host_io_active') {
+          return 'The USB host is still using the card.';
+        }
+        if (error.reason === 'switch_in_progress') {
+          return 'A mode switch is already running.';
+        }
+      }
+    }
+
     return error instanceof Error ? error.message : String(error);
   }
 }

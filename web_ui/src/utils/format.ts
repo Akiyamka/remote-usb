@@ -30,3 +30,33 @@ export function formatMTime(mtime: number | null | undefined): string {
     timeStyle: 'short',
   }).format(new Date(mtime * 1000));
 }
+
+const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', {
+  numeric: 'auto',
+});
+
+const relativeTimeUnits = [
+  ['year', 365 * 24 * 60 * 60],
+  ['month', 30 * 24 * 60 * 60],
+  ['week', 7 * 24 * 60 * 60],
+  ['day', 24 * 60 * 60],
+  ['hour', 60 * 60],
+  ['minute', 60],
+  ['second', 1],
+] as const satisfies ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, number]>;
+
+export function formatRelativeMTime(mtime: number | null | undefined): string {
+  if (mtime === null || mtime === undefined || !Number.isFinite(mtime)) {
+    return 'unknown';
+  }
+
+  const diffSeconds = mtime - Date.now() / 1000;
+  const absDiffSeconds = Math.abs(diffSeconds);
+  const [unit, seconds] = relativeTimeUnits.find(([, value]) => absDiffSeconds >= value) ?? [
+    'second',
+    1,
+  ];
+  const formatted = relativeTimeFormatter.format(Math.round(diffSeconds / seconds), unit);
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}

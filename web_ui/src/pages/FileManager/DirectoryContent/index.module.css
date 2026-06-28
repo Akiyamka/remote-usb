@@ -11,7 +11,7 @@
   cursor: pointer;
   display: grid;
   gap: 8px;
-  grid-template-columns: 32px minmax(0, 1fr) minmax(220px, auto) 40px;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(80px, max-content) minmax(110px, max-content) 40px;
   min-height: 48px;
   padding: 6px 8px;
   position: relative;
@@ -36,13 +36,14 @@
   white-space: nowrap;
 }
 
-.entryMeta {
+.entrySize,
+.entryMTime {
   color: var(--muted-color);
-  display: grid;
   font-size: 0.86rem;
   font-variant-numeric: tabular-nums;
-  gap: 2px;
-  justify-items: end;
+  justify-self: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -55,14 +56,21 @@
   background-color: white;
   border: 1px solid var(--line-color);
   box-shadow: 0 10px 30px hsla(0, 0%, 0%, 0.16);
-  display: flex;
+  box-sizing: border-box;
   flex-flow: column nowrap;
+  gap: 6px;
+  inset: auto;
+  justify-self: end;
+  margin: 4px 0 0;
+  max-width: calc(100vw - 16px);
   min-width: 150px;
-  padding: 4px;
-  position: absolute;
-  right: 8px;
-  top: 42px;
-  z-index: 5;
+  padding: 8px;
+  position: fixed;
+  position-area: block-end span-inline-start;
+}
+
+.entryMenu:popover-open {
+  display: flex;
 }
 
 .entryMenu button {
@@ -96,14 +104,19 @@
     grid-template-columns: 30px minmax(0, 1fr) 40px;
   }
 
-  .entryMeta {
+  .entrySize,
+  .entryMTime {
     grid-column: 2;
-    justify-items: start;
+    justify-self: start;
+  }
+
+  .entryMTime {
+    grid-row: 3;
   }
 
   .entryActions {
     grid-column: 3;
-    grid-row: 1 / span 2;
+    grid-row: 1 / span 3;
   }
 }
 
