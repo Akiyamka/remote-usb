@@ -463,6 +463,7 @@ static esp_err_t handle_file_upload(httpd_req_t *req)
     char *buf = NULL;
     esp_err_t result = ESP_OK;
     const char *error = "upload_failed";
+    bool remove_partial = false;
 
     file = fopen(full_path, "wb");
     if (file == NULL) {
@@ -470,6 +471,7 @@ static esp_err_t handle_file_upload(httpd_req_t *req)
         error = "fopen_failed";
         goto cleanup;
     }
+    remove_partial = true;
 
     buf = malloc(FILE_IO_CHUNK_SIZE);
     if (buf == NULL) {
@@ -514,7 +516,9 @@ cleanup:
     http_set_upload_in_progress(false);
 
     if (result != ESP_OK) {
-        remove(full_path);
+        if (remove_partial) {
+            remove(full_path);
+        }
         return http_send_500(req, error);
     }
 
