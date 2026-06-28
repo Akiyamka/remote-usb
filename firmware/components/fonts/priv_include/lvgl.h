@@ -2,9 +2,8 @@
 //
 // Minimal LVGL ABI shim — *NOT* a full LVGL header.
 //
-// The three Maple Mono font files under `firmware/fonts/` are unmodified
-// output of LVGL's `lv_font_conv` tool. Each `#include "lvgl.h"` and then
-// initialises `lv_font_t` + supporting structs using designated initialisers.
+// The generated pixel-font files under `firmware/fonts/` include "lvgl.h" and
+// initialise `lv_font_t` + supporting structs using designated initialisers.
 // We don't want to drag actual LVGL into the firmware just to read those
 // tables, so this header declares *only* the types those generated files
 // reference, with the same field layout LVGL v9 uses.

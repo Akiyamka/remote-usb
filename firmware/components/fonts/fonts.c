@@ -1,46 +1,63 @@
 // SPDX-License-Identifier: MIT
 //
-// Bitmap-font lookup over the three pre-generated Maple Mono variants.
+// Bitmap-font lookup over the generated pixel-font variants.
 //
-// Internally we know that the generated files come from `lv_font_conv` and
-// expose their data as `lv_font_t` with a `lv_font_fmt_txt_dsc_t` payload
-// (single FORMAT0_TINY cmap covering ASCII 32..126, 4 bpp glyphs). We bend
-// that into the flat `font_glyph_t` shape `fonts.h` advertises.
+// Internally we know that the generated files expose their data as `lv_font_t`
+// with a `lv_font_fmt_txt_dsc_t` payload (FORMAT0_TINY cmaps, 1 bpp glyphs).
+// We bend that into the flat `font_glyph_t` shape `fonts.h` advertises.
 
 #include "fonts.h"
 #include "lvgl.h"
 
 // Generated tables — declared by the compiled-in font sources.
-extern const lv_font_t lv_font_maplemomo_12;
-extern const lv_font_t lv_font_maplemomo_14;
-extern const lv_font_t lv_font_maplemomo_16;
+extern const lv_font_t lv_font_delicatus_16;
+extern const lv_font_t lv_font_cairopixel_32;
+extern const lv_font_t lv_font_quinquefive_5;
+extern const lv_font_t lv_font_quinquefive_10_digits;
 
 static const lv_font_t *font_handle(font_size_t size)
 {
     switch (size) {
-        case FONT_SMALL:  return &lv_font_maplemomo_12;
-        case FONT_MEDIUM: return &lv_font_maplemomo_14;
-        case FONT_LARGE:  return &lv_font_maplemomo_16;
-        default:          return NULL;
+        case FONT_DELICATUS_16:   return &lv_font_delicatus_16;
+        case FONT_CAIROPIXEL_32:  return &lv_font_cairopixel_32;
+        case FONT_QUINQUEFIVE_5:  return &lv_font_quinquefive_5;
+        case FONT_QUINQUEFIVE_10_DIGITS:
+                                  return &lv_font_quinquefive_10_digits;
+        default:                  return NULL;
     }
 }
 
-// Resolve the glyph id (index into glyph_dsc[]) for a code-point, using the
-// single FORMAT0_TINY cmap our font conv emits. Returns 0 for "no glyph".
+uint8_t fonts_grid_px(font_size_t size)
+{
+    switch (size) {
+        case FONT_QUINQUEFIVE_10_DIGITS:
+        case FONT_CAIROPIXEL_32: return 2;
+        case FONT_DELICATUS_16:
+        case FONT_QUINQUEFIVE_5:
+        default:                 return 1;
+    }
+}
+
+// Resolve the glyph id (index into glyph_dsc[]) for a code-point. Returns 0
+// for "no glyph".
 static uint32_t resolve_glyph_id(const lv_font_fmt_txt_dsc_t *dsc, uint32_t cp)
 {
     if (dsc->cmap_num == 0 || dsc->cmaps == NULL) {
         return 0;
     }
-    const lv_font_fmt_txt_cmap_t *cmap = &dsc->cmaps[0];
-    if (cmap->type != LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY) {
-        // We only support the format `lv_font_conv` produced for these files.
-        return 0;
+
+    for (uint16_t i = 0; i < dsc->cmap_num; ++i) {
+        const lv_font_fmt_txt_cmap_t *cmap = &dsc->cmaps[i];
+        if (cmap->type != LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY) {
+            continue;
+        }
+        if (cp < cmap->range_start ||
+            cp >= (cmap->range_start + cmap->range_length)) {
+            continue;
+        }
+        return (uint32_t)cmap->glyph_id_start + (cp - cmap->range_start);
     }
-    if (cp < cmap->range_start || cp >= (cmap->range_start + cmap->range_length)) {
-        return 0;
-    }
-    return (uint32_t)cmap->glyph_id_start + (cp - cmap->range_start);
+    return 0;
 }
 
 bool fonts_glyph(font_size_t size, uint32_t unicode, font_glyph_t *out)

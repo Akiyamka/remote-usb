@@ -5,7 +5,7 @@
 // Sits on top of the standard ESP-IDF `esp_lcd_panel` HAL (see
 // `esp_lcd_st7735.c` for the vendor-specific init sequence). We do not pull
 // LVGL into the firmware; instead we rasterise text into a small RAM tile
-// using the Maple Mono fonts from the `fonts` component and ship each tile
+// using the pixel fonts from the `fonts` component and ship each tile
 // to the panel via `esp_lcd_panel_draw_bitmap()`.
 //
 // Coordinate system: the panel is configured for landscape 160x80 — the
@@ -62,10 +62,13 @@ esp_err_t bsp_lcd_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
 // Draw a NUL-terminated UTF-8 string (ASCII subset honoured) at pixel
 // position (x, y) — y is the TOP of the line — using the named bitmap
 // font. Each glyph cell is `adv_w x line_height` and gets cleared to `bg`
-// first, with the foreground glyph alpha-blended onto it. Returns the first
+// first, with foreground pixels copied onto it. Returns the first
 // non-OK error from the underlying SPI transactions.
 esp_err_t bsp_lcd_draw_text(int16_t x, int16_t y, font_size_t font,
                             const char *str, uint16_t fg, uint16_t bg);
+
+// Measure the on-screen width of a string in whole pixels.
+int16_t bsp_lcd_measure_text(font_size_t font, const char *str);
 
 // Same as `bsp_lcd_draw_text()` but draws the line horizontally centred in
 // the panel. Returns ESP_OK and clamps to the left edge if the string is

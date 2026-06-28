@@ -67,27 +67,32 @@ void ui_state_init(void)
     ESP_LOGI(TAG, "LCD UI initialised");
 }
 
-static void fit_text(char *dst, size_t dst_size, const char *src)
+static void fit_text_px(char *dst, size_t dst_size, const char *src,
+                        font_size_t font, int16_t max_width)
 {
     if (dst_size == 0) {
         return;
     }
 
-    if (src == NULL) {
+    if (max_width <= 0) {
         dst[0] = '\0';
         return;
     }
 
-    const size_t len = strlen(src);
-    if (len < dst_size) {
-        memcpy(dst, src, len + 1);
+    snprintf(dst, dst_size, "%s", src != NULL ? src : "");
+    if (bsp_lcd_measure_text(font, dst) <= max_width) {
         return;
     }
 
-    memcpy(dst, src, dst_size - 1);
-    dst[dst_size - 1] = '\0';
-    if (dst_size > 2) {
-        dst[dst_size - 2] = '>';
+    size_t len = strlen(dst);
+    while (len > 0) {
+        dst[len - 1] = '>';
+        dst[len] = '\0';
+        if (bsp_lcd_measure_text(font, dst) <= max_width) {
+            return;
+        }
+        --len;
+        dst[len] = '\0';
     }
 }
 
@@ -109,25 +114,39 @@ static void draw_centered(int16_t y, font_size_t font, const char *text,
     }
 }
 
+static void draw_centered_fit(int16_t y, font_size_t font, const char *text,
+                              uint16_t fg)
+{
+    char fitted[40];
+    fit_text_px(fitted, sizeof(fitted), text, font, BSP_LCD_WIDTH);
+    draw_centered(y, font, fitted, fg);
+}
+
 static void draw_wifi_mode(ui_screen_t screen)
 {
-    char ssid[23];
+    char ssid[33];
     char ip[16];
-    fit_text(ssid, sizeof(ssid), s_ssid);
-    fit_text(ip, sizeof(ip), s_ip[0] != '\0' ? s_ip : "No IP");
+    fit_text_px(ssid, sizeof(ssid), s_ssid,
+                FONT_DELICATUS_16, BSP_LCD_WIDTH);
 
-    draw_centered(5, FONT_SMALL, ssid, BSP_LCD_WHITE);
-    draw_centered(24, FONT_MEDIUM, ip, BSP_LCD_GREEN);
-
-    const char *mode = "Mode: ?";
-    if (screen == UI_MODE_HTTP) {
-        mode = "Mode: HTTP";
-    } else if (screen == UI_MODE_USB) {
-        mode = "Mode: USB";
-    } else if (screen == UI_SWITCHING) {
-        mode = "Switching...";
+    draw_centered(4, FONT_DELICATUS_16, ssid, BSP_LCD_WHITE);
+    if (s_ip[0] != '\0') {
+        fit_text_px(ip, sizeof(ip), s_ip,
+                    FONT_QUINQUEFIVE_10_DIGITS, BSP_LCD_WIDTH + 2);
+        draw_centered(30, FONT_QUINQUEFIVE_10_DIGITS, ip, BSP_LCD_GREEN);
+    } else {
+        draw_centered_fit(28, FONT_DELICATUS_16, "No IP", BSP_LCD_GREEN);
     }
-    draw_centered(52, FONT_SMALL, mode, BSP_LCD_CYAN);
+
+    const char *mode = "?";
+    if (screen == UI_MODE_HTTP) {
+        mode = "HTTP";
+    } else if (screen == UI_MODE_USB) {
+        mode = "USB";
+    } else if (screen == UI_SWITCHING) {
+        mode = "SWITCH";
+    }
+    draw_centered_fit(60, FONT_QUINQUEFIVE_5, mode, BSP_LCD_CYAN);
 }
 
 static void draw_screen(ui_screen_t screen)
@@ -143,47 +162,49 @@ static void draw_screen(ui_screen_t screen)
     }
 
     char line[32];
-    char ssid[23];
+    char ssid[33];
 
     switch (screen) {
     case UI_BOOT_WELCOME:
-        draw_centered(19, FONT_LARGE, "Welcome", BSP_LCD_WHITE);
-        draw_centered(42, FONT_LARGE, APP_VERSION_STR, BSP_LCD_GREEN);
+        draw_centered_fit(4, FONT_DELICATUS_16, "Welcome", BSP_LCD_WHITE);
+        draw_centered_fit(30, FONT_CAIROPIXEL_32,
+                          APP_VERSION_STR, BSP_LCD_GREEN);
         break;
 
     case UI_BOOT_SD_MEMORY:
-        draw_centered(5, FONT_LARGE, "Memory", BSP_LCD_WHITE);
-        snprintf(line, sizeof(line), "total: %" PRIu64 "GB",
+        draw_centered_fit(2, FONT_CAIROPIXEL_32, "MEM", BSP_LCD_WHITE);
+        snprintf(line, sizeof(line), "T%" PRIu64 "G",
                  bytes_to_gb(s_total_bytes));
-        draw_centered(31, FONT_SMALL, line, BSP_LCD_GREEN);
-        snprintf(line, sizeof(line), "free: %" PRIu64 "GB",
+        draw_centered_fit(30, FONT_DELICATUS_16, line, BSP_LCD_GREEN);
+        snprintf(line, sizeof(line), "F%" PRIu64 "G",
                  bytes_to_gb(s_free_bytes));
-        draw_centered(49, FONT_SMALL, line, BSP_LCD_CYAN);
+        draw_centered_fit(50, FONT_DELICATUS_16, line, BSP_LCD_CYAN);
         break;
 
     case UI_BOOT_CONNECTING:
-        fit_text(ssid, sizeof(ssid), s_ssid);
-        draw_centered(15, FONT_SMALL, "Connecting to", BSP_LCD_WHITE);
-        draw_centered(36, FONT_SMALL, ssid, BSP_LCD_GREEN);
+        fit_text_px(ssid, sizeof(ssid), s_ssid,
+                    FONT_DELICATUS_16, BSP_LCD_WIDTH);
+        draw_centered_fit(8, FONT_DELICATUS_16, "Connecting", BSP_LCD_WHITE);
+        draw_centered(32, FONT_DELICATUS_16, ssid, BSP_LCD_GREEN);
         break;
 
     case UI_BOOT_CONFIG_INVALID:
-        draw_centered(16, FONT_MEDIUM, "wifi.cfg invalid", BSP_LCD_RED);
-        draw_centered(40, FONT_SMALL, "Fix and reboot", BSP_LCD_WHITE);
+        draw_centered_fit(12, FONT_DELICATUS_16, "Bad wifi.cfg", BSP_LCD_RED);
+        draw_centered_fit(38, FONT_DELICATUS_16, "Fix & reboot", BSP_LCD_WHITE);
         break;
 
     case UI_BOOT_CONFIG_CREATED:
-        draw_centered(8, FONT_SMALL, "wifi.cfg created", BSP_LCD_GREEN);
-        draw_centered(29, FONT_SMALL, "Fill credentials", BSP_LCD_WHITE);
-        draw_centered(50, FONT_SMALL, "and reboot", BSP_LCD_WHITE);
+        draw_centered_fit(4, FONT_DELICATUS_16, "wifi.cfg", BSP_LCD_GREEN);
+        draw_centered_fit(28, FONT_DELICATUS_16, "created", BSP_LCD_WHITE);
+        draw_centered_fit(56, FONT_QUINQUEFIVE_5, "REBOOT", BSP_LCD_WHITE);
         break;
 
     case UI_BOOT_CONNECT_FAILED:
-        fit_text(ssid, sizeof(ssid), s_ssid);
-        draw_centered(2, FONT_SMALL, "Can't connect", BSP_LCD_RED);
-        draw_centered(20, FONT_SMALL, ssid, BSP_LCD_WHITE);
-        draw_centered(40, FONT_SMALL, "USB drive", BSP_LCD_BLUE);
-        draw_centered(58, FONT_SMALL, "mode active", BSP_LCD_BLUE);
+        fit_text_px(ssid, sizeof(ssid), s_ssid,
+                    FONT_DELICATUS_16, BSP_LCD_WIDTH);
+        draw_centered_fit(4, FONT_DELICATUS_16, "No WiFi", BSP_LCD_RED);
+        draw_centered(28, FONT_DELICATUS_16, ssid, BSP_LCD_WHITE);
+        draw_centered_fit(56, FONT_QUINQUEFIVE_5, "USB", BSP_LCD_BLUE);
         break;
 
     case UI_MODE_USB:
@@ -193,14 +214,14 @@ static void draw_screen(ui_screen_t screen)
         break;
 
     case UI_ERROR_SD:
-        draw_centered(18, FONT_LARGE, "SD Card", BSP_LCD_RED);
-        draw_centered(43, FONT_LARGE, "required", BSP_LCD_WHITE);
+        draw_centered_fit(4, FONT_CAIROPIXEL_32, "SD", BSP_LCD_RED);
+        draw_centered_fit(36, FONT_DELICATUS_16, "Card req.", BSP_LCD_WHITE);
         break;
 
     case UI_ERROR_GENERIC:
     default:
-        draw_centered(18, FONT_LARGE, "Error", BSP_LCD_RED);
-        draw_centered(43, FONT_SMALL, "Check serial log", BSP_LCD_WHITE);
+        draw_centered_fit(4, FONT_CAIROPIXEL_32, "Error", BSP_LCD_RED);
+        draw_centered_fit(36, FONT_DELICATUS_16, "Serial log", BSP_LCD_WHITE);
         break;
     }
 }

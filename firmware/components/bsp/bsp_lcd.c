@@ -6,18 +6,15 @@
 // the working wi-fi-drive Arduino reference). Here we set up the SPI bus,
 // hand the panel to the IDF `esp_lcd` HAL, configure landscape orientation
 // with the 0.96" 80x160 IPS panel's well-known gaps (x=1, y=26), and then
-// add a tiny 4 bpp glyph rasteriser on top.
+// add a tiny 1 bpp pixel-font rasteriser on top.
 //
 // The rasteriser draws one character at a time into a small static tile
-// (max ≈10x19 RGB565 = 380 bytes) and ships the tile via
-// `esp_lcd_panel_draw_bitmap()`. That avoids any per-pixel SPI overhead
-// and keeps RAM use predictable.
+// and ships the tile via `esp_lcd_panel_draw_bitmap()`. That avoids any
+// per-pixel SPI overhead and keeps RAM use predictable.
 
 #include "bsp_lcd.h"
 #include "bsp_pins.h"
 #include "esp_lcd_st7735.h"
-
-#include <string.h>
 
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
@@ -48,10 +45,10 @@ static const char *TAG = "bsp_lcd";
 #define BSP_LCD_BL_ON_LEVEL  0
 #define BSP_LCD_BL_OFF_LEVEL 1
 
-// Worst-case glyph cell for the FONT_LARGE (Maple Mono 16). adv ≈ 10 px,
-// line_height = 19 px. Round up to a fixed 16x24 tile to leave headroom for
-// future fonts up to size 20 px without needing a re-tune.
-#define BSP_LCD_TILE_MAX_W   16
+// Worst-case glyph cell for the generated pixel fonts is Cairopixel 32:
+// advance 20 px, tight line height 20 px. Round up to leave a little room
+// for regeneration changes without needing a re-tune.
+#define BSP_LCD_TILE_MAX_W   24
 #define BSP_LCD_TILE_MAX_H   24
 #define BSP_LCD_TILE_PIXELS  (BSP_LCD_TILE_MAX_W * BSP_LCD_TILE_MAX_H)
 
@@ -106,9 +103,7 @@ static uint16_t s_tile[BSP_LCD_TILE_PIXELS];
 // ST7735 clocks RGB565 pixels out high-byte first, but the Xtensa core is
 // little-endian and our render math produces native uint16_t. Swap the two
 // bytes so the bit pattern in memory matches what the panel will read off
-// the wire. Anti-aliased glyph edges in particular look completely wrong
-// without this — mid-alpha blended pixels collapse to near-black because
-// the panel interprets `0x84 0x10` as `0x1084` instead of `0x8410`.
+// the wire.
 static inline uint16_t to_be565(uint16_t host)
 {
     return (uint16_t)((host >> 8) | (host << 8));
@@ -237,39 +232,27 @@ static esp_err_t fill_rect_clipped(int16_t x, int16_t y, uint16_t w, uint16_t h,
         return ESP_OK;
     }
     const uint16_t color_be = to_be565(color);
-    if (w > BSP_LCD_TILE_MAX_W * 4) {
-        // Process the rect in horizontal stripes if it's too wide for a
-        // single tile slice. We rely on s_tile holding `slice_w * slice_h`
-        // pixels; pick the tallest slice we can afford for a given width.
-        uint16_t slice_h = (uint16_t)(BSP_LCD_TILE_PIXELS / w);
-        if (slice_h == 0) {
-            // Extremely wide rectangle (≥ tile capacity) — recurse vertically.
-            slice_h = 1;
-        }
-        // Pre-fill one row's worth in case slice_h ends up being just 1.
-        for (uint16_t i = 0; i < w; ++i) {
+    uint16_t slice_h = (uint16_t)(BSP_LCD_TILE_PIXELS / w);
+    if (slice_h == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (uint16_t y_done = 0; y_done < h; y_done = (uint16_t)(y_done + slice_h)) {
+        const uint16_t this_h =
+            (h - y_done) < slice_h ? (uint16_t)(h - y_done) : slice_h;
+        const uint32_t total = (uint32_t)w * this_h;
+        for (uint32_t i = 0; i < total; ++i) {
             s_tile[i] = color_be;
         }
-        for (uint16_t y_done = 0; y_done < h; y_done += slice_h) {
-            uint16_t this_h = (h - y_done) < slice_h ? (uint16_t)(h - y_done) : slice_h;
-            // Replicate the first row down to fill this slice.
-            for (uint16_t row = 1; row < this_h; ++row) {
-                memcpy(&s_tile[row * w], s_tile, w * sizeof(uint16_t));
-            }
-            esp_err_t err = draw_bitmap_sync(
-                x, y + y_done, x + w, y + y_done + this_h, s_tile);
-            if (err != ESP_OK) {
-                return err;
-            }
+
+        esp_err_t err = draw_bitmap_sync(x, y + y_done,
+                                         x + w, y + y_done + this_h,
+                                         s_tile);
+        if (err != ESP_OK) {
+            return err;
         }
-        return ESP_OK;
     }
-    // Small rect — fill the whole tile and ship it once.
-    const uint32_t total = (uint32_t)w * h;
-    for (uint32_t i = 0; i < total; ++i) {
-        s_tile[i] = color_be;
-    }
-    return draw_bitmap_sync(x, y, x + w, y + h, s_tile);
+    return ESP_OK;
 }
 
 esp_err_t bsp_lcd_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
@@ -296,22 +279,19 @@ esp_err_t bsp_lcd_clear(uint16_t color)
 // Glyph rasterisation
 // ---------------------------------------------------------------------------
 
-// Linear 4 bpp α blend between two RGB565 colours. Channels are unpacked,
-// blended at 5/6/5-bit precision, and repacked. Inputs and output are
-// host-endian uint16_t.
-static inline uint16_t blend_rgb565(uint16_t fg, uint16_t bg, uint8_t alpha)
+static int16_t align_to_font_grid(int16_t value, font_size_t font)
 {
-    const uint8_t inv = (uint8_t)(15 - alpha);
-    const uint8_t r_fg = (uint8_t)((fg >> 11) & 0x1F);
-    const uint8_t g_fg = (uint8_t)((fg >>  5) & 0x3F);
-    const uint8_t b_fg = (uint8_t)( fg        & 0x1F);
-    const uint8_t r_bg = (uint8_t)((bg >> 11) & 0x1F);
-    const uint8_t g_bg = (uint8_t)((bg >>  5) & 0x3F);
-    const uint8_t b_bg = (uint8_t)( bg        & 0x1F);
-    const uint8_t r = (uint8_t)((r_fg * alpha + r_bg * inv) / 15);
-    const uint8_t g = (uint8_t)((g_fg * alpha + g_bg * inv) / 15);
-    const uint8_t b = (uint8_t)((b_fg * alpha + b_bg * inv) / 15);
-    return (uint16_t)((r << 11) | (g << 5) | b);
+    const int16_t grid = (int16_t)fonts_grid_px(font);
+    if (grid <= 1) {
+        return value;
+    }
+
+    const int16_t mod = (int16_t)(value % grid);
+    if (mod == 0) {
+        return value;
+    }
+    return (value >= 0) ? (int16_t)(value - mod)
+                        : (int16_t)(value - mod - grid);
 }
 
 // Render a single character cell (`adv_px × line_height`) into `s_tile` and
@@ -345,18 +325,30 @@ static esp_err_t draw_glyph(int16_t cell_x, int16_t cell_y,
     if (adv <= 0 || line_h <= 0) {
         return ESP_OK;
     }
-    if (adv > BSP_LCD_TILE_MAX_W || line_h > BSP_LCD_TILE_MAX_H) {
-        // Future-proofing: if a bigger font slips in by accident, log and
-        // fall back to a plain bg cell rather than overrunning the tile.
-        ESP_LOGW(TAG, "glyph cell %dx%d exceeds tile %dx%d",
-                 adv, line_h, BSP_LCD_TILE_MAX_W, BSP_LCD_TILE_MAX_H);
-        return bsp_lcd_fill_rect(cell_x, cell_y, (uint16_t)adv, (uint16_t)line_h, bg);
+
+    int16_t x0 = cell_x;
+    int16_t y0 = cell_y;
+    int16_t x1 = (int16_t)(cell_x + adv);
+    int16_t y1 = (int16_t)(cell_y + line_h);
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > (int16_t)BSP_LCD_WIDTH)  x1 = BSP_LCD_WIDTH;
+    if (y1 > (int16_t)BSP_LCD_HEIGHT) y1 = BSP_LCD_HEIGHT;
+    if (x0 >= x1 || y0 >= y1) {
+        return ESP_OK;
     }
 
-    // Fill the cell with the background colour first.
+    const uint16_t clip_w = (uint16_t)(x1 - x0);
+    const uint16_t clip_h = (uint16_t)(y1 - y0);
+    if (clip_w > BSP_LCD_TILE_MAX_W || clip_h > BSP_LCD_TILE_MAX_H) {
+        ESP_LOGW(TAG, "glyph clip %dx%d exceeds tile %dx%d",
+                 clip_w, clip_h, BSP_LCD_TILE_MAX_W, BSP_LCD_TILE_MAX_H);
+        return bsp_lcd_fill_rect(x0, y0, clip_w, clip_h, bg);
+    }
+
     const uint16_t bg_be = to_be565(bg);
     const uint16_t fg_be = to_be565(fg);
-    const uint32_t total = (uint32_t)adv * (uint32_t)line_h;
+    const uint32_t total = (uint32_t)clip_w * (uint32_t)clip_h;
     for (uint32_t i = 0; i < total; ++i) {
         s_tile[i] = bg_be;
     }
@@ -369,25 +361,26 @@ static esp_err_t draw_glyph(int16_t cell_x, int16_t cell_y,
         const int16_t ascent = (int16_t)(line_h - base);
         const int16_t glyph_top  = (int16_t)(ascent - g.ofs_y - g.box_h);
         const int16_t glyph_left = (int16_t)(g.ofs_x);
+        const int16_t clip_cell_x0 = (int16_t)(x0 - cell_x);
+        const int16_t clip_cell_y0 = (int16_t)(y0 - cell_y);
+        const int16_t clip_cell_x1 = (int16_t)(clip_cell_x0 + clip_w);
+        const int16_t clip_cell_y1 = (int16_t)(clip_cell_y0 + clip_h);
 
         for (uint16_t py = 0; py < g.box_h; ++py) {
             const int16_t ty = (int16_t)(glyph_top + py);
-            if (ty < 0 || ty >= line_h) continue;
+            if (ty < clip_cell_y0 || ty >= clip_cell_y1) continue;
             for (uint16_t px = 0; px < g.box_w; ++px) {
                 const int16_t tx = (int16_t)(glyph_left + px);
-                if (tx < 0 || tx >= adv) continue;
-                const uint8_t a = fonts_pixel_a4(g.bitmap, g.box_w, px, py);
-                if (a == 0)        continue;          // fully transparent
-                const uint16_t out = (a == 15) ? fg_be
-                                               : to_be565(blend_rgb565(fg, bg, a));
-                s_tile[(uint32_t)ty * adv + tx] = out;
+                if (tx < clip_cell_x0 || tx >= clip_cell_x1) continue;
+                if (!fonts_pixel_on(g.bitmap, g.box_w, g.bpp, px, py)) continue;
+                const uint16_t out_x = (uint16_t)(tx - clip_cell_x0);
+                const uint16_t out_y = (uint16_t)(ty - clip_cell_y0);
+                s_tile[(uint32_t)out_y * clip_w + out_x] = fg_be;
             }
         }
     }
 
-    return draw_bitmap_sync(cell_x, cell_y,
-                            cell_x + adv, cell_y + line_h,
-                            s_tile);
+    return draw_bitmap_sync(x0, y0, x1, y1, s_tile);
 }
 
 // Compute the on-screen width of a string (no actual drawing).
@@ -410,6 +403,11 @@ static int16_t measure_text(font_size_t font, const char *str)
     return w;
 }
 
+int16_t bsp_lcd_measure_text(font_size_t font, const char *str)
+{
+    return measure_text(font, str);
+}
+
 esp_err_t bsp_lcd_draw_text(int16_t x, int16_t y, font_size_t font,
                             const char *str, uint16_t fg, uint16_t bg)
 {
@@ -418,6 +416,8 @@ esp_err_t bsp_lcd_draw_text(int16_t x, int16_t y, font_size_t font,
 
     const int16_t line_h = fonts_line_height(font);
     if (line_h <= 0) return ESP_ERR_INVALID_ARG;
+    x = align_to_font_grid(x, font);
+    y = align_to_font_grid(y, font);
 
     // Early-out if the line is entirely off-screen vertically.
     if (y >= (int16_t)BSP_LCD_HEIGHT || y + line_h <= 0) return ESP_OK;
