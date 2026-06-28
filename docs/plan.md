@@ -350,7 +350,6 @@ components/ui/
 1. `ui_state`:
    - Stores the current `ui_screen_t` and last known ssid/ip/total/free.
    - On screen change: `bsp_lcd_clear` + multi-line `bsp_lcd_draw_text`.
-   - Optionally use a large 16x32 font for the IP address.
 2. `ui_led`:
    - Spawn a task (priority 2, core 1, stack 4096) that updates the LED color every ~100 ms.
    - Internal state: solid_blue / solid_green / solid_yellow / blink_red / blink_white / blink_green / off.

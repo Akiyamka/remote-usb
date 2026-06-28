@@ -22,7 +22,7 @@ static const char *TAG = "main";
 // Firmware revision banner shown on the welcome screen. Bumped alongside
 // each spec/plan revision so we can verify on the LCD which build is
 // actually flashed onto the device.
-#define APP_VERSION_STR  "v0.0.10"
+#define APP_VERSION_STR  "v0.0.11"
 
 static esp_err_t init_nvs(void)
 {
@@ -93,11 +93,11 @@ static void load_wifi_credentials(wifi_creds_t *creds,
     startup_error_loop();
 }
 
-static void persist_file_credentials(const wifi_creds_t *creds,
+static bool persist_file_credentials(const wifi_creds_t *creds,
                                      wifi_creds_source_t source)
 {
     if (source != WIFI_CREDS_FROM_FILE) {
-        return;
+        return false;
     }
 
     esp_err_t ret = wifi_cfg_save_to_nvs(creds);
@@ -107,12 +107,12 @@ static void persist_file_credentials(const wifi_creds_t *creds,
             ESP_LOGW(TAG, "Failed to delete wifi.cfg after NVS save: %s",
                      esp_err_to_name(ret));
         }
-        return;
+        return false;
     }
 
     ESP_LOGW(TAG, "Failed to save credentials to NVS, keeping wifi.cfg: %s",
              esp_err_to_name(ret));
-    ui_led_set_special_yellow();
+    return true;
 }
 
 void app_main(void)
@@ -170,7 +170,10 @@ void app_main(void)
         ESP_LOGI(TAG, "Wi-Fi connected: ssid='%s' ip=%s rssi=%d",
                  status.ssid, status.ip_str, status.rssi);
 
-        persist_file_credentials(&creds, source);
+        ui_state_show(UI_MODE_HTTP);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        const bool creds_save_failed = persist_file_credentials(&creds, source);
 
         ret = http_server_start();
         if (ret != ESP_OK) {
@@ -178,6 +181,9 @@ void app_main(void)
         }
 
         ui_state_show(UI_MODE_HTTP);
+        if (creds_save_failed) {
+            ui_led_set_special_yellow();
+        }
         ESP_LOGI(TAG, "Startup complete: HTTP mode");
         return;
     }
@@ -185,7 +191,7 @@ void app_main(void)
     ESP_LOGW(TAG, "Wi-Fi connect failed, falling back to USB mode: %s",
              esp_err_to_name(ret));
     ui_state_show(UI_BOOT_CONNECT_FAILED);
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(3000));
 
     ret = sd_owner_switch_to_msc();
     if (ret != ESP_OK) {
