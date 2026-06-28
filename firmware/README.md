@@ -6,21 +6,24 @@ See [`../docs/spec.md`](../docs/spec.md) and [`../docs/plan.md`](../docs/plan.md
 ## Build environment
 
 This project deliberately does **not** rely on a system-wide ESP-IDF install.
-Instead it uses the official `espressif/idf` container via Podman through a
-thin wrapper at [`tools/idf`](tools/idf). The IDF version is pinned in that
-script (`release-v5.3`).
+Instead it uses the official `espressif/idf` container via Podman or Docker
+through a thin wrapper at [`tools/idf`](tools/idf). The IDF version is pinned in
+that script (`release-v5.3`).
 
 Requirements:
 
-- Linux + [Podman](https://podman.io/) (rootless is fine and recommended)
+- Linux + [Podman](https://podman.io/) or Docker (rootless Podman is fine and
+  recommended)
 - About 2 GB free disk for the container image on first pull
 - About 1–2 GB free in `~/.cache/esp-idf-podman/` for the shared toolchain cache
 
 ## Usage
 
 ```sh
-# First-time only: pull the image (~1.5 GB)
+# First-time only: pull the image (~1.5 GB). The wrapper will also pull on demand.
 podman pull docker.io/espressif/idf:release-v5.3
+# Or, on Docker-only systems:
+docker pull docker.io/espressif/idf:release-v5.3
 
 # From the firmware/ directory:
 ./tools/idf set-target esp32s3
@@ -40,12 +43,14 @@ podman pull docker.io/espressif/idf:release-v5.3
 
 The wrapper:
 
+- selects `podman` when available, otherwise `docker`; override with
+  `IDF_CONTAINER_RUNTIME=docker` or `IDF_CONTAINER_RUNTIME=podman`,
 - mounts `firmware/` at `/project` inside the container,
 - forwards any `/dev/tty*` argument as a `--device=` passthrough,
 - persists ccache and the component-manager cache under
   `~/.cache/esp-idf-podman/` so subsequent builds are fast,
-- uses `--userns=keep-id` so files written by the container are owned by your
-  host user (no `chown` dance).
+- keeps files written by the container owned by your host user (Podman uses
+  `--userns=keep-id`; Docker runs as your host UID/GID).
 
 ## Web UI LittleFS partition
 
@@ -152,7 +157,7 @@ firmware/
 │   ├── idf_component.yml   # esp_tinyusb, littlefs
 │   └── main.c              # app_main
 └── tools/
-    └── idf                 # Podman wrapper around idf.py
+    └── idf                 # container wrapper around idf.py
 ```
 
 ## Switching IDF version

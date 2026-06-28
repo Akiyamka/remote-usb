@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Wrapper that runs `idf.py` inside the official Espressif ESP-IDF
-# container via Podman. Keeps the host clean from Python/ninja/toolchain
+# container via Podman or Docker. Keeps the host clean from Python/ninja/toolchain
 # pollution and pins the IDF version per-project.
 #
 # Usage (from anywhere):
@@ -10,14 +10,28 @@
 #   firmware/tools/idf menuconfig
 #
 # Env overrides:
-#   ESP_IDF_IMAGE   container image (default pinned below)
-#   PODMAN          podman binary name/path (default: podman)
+#   ESP_IDF_IMAGE          container image (default pinned below)
+#   IDF_CONTAINER_RUNTIME  podman/docker binary name/path (default: auto)
+#   PODMAN                 legacy alias for IDF_CONTAINER_RUNTIME
 
 set -euo pipefail
 
 # Pin to v5.3 per spec.md §13. Bump deliberately when upgrading IDF.
 IMAGE="${ESP_IDF_IMAGE:-docker.io/espressif/idf:release-v5.3}"
-PODMAN="${PODMAN:-podman}"
+RUNTIME="${IDF_CONTAINER_RUNTIME:-${PODMAN:-}}"
+
+if [[ -z "$RUNTIME" ]]; then
+  if command -v podman >/dev/null 2>&1; then
+    RUNTIME=podman
+  elif command -v docker >/dev/null 2>&1; then
+    RUNTIME=docker
+  else
+    echo "error: neither podman nor docker was found; install one or set IDF_CONTAINER_RUNTIME" >&2
+    exit 127
+  fi
+fi
+
+RUNTIME_NAME="${RUNTIME##*/}"
 
 # Resolve the firmware/ directory (parent of this script's dir).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,37 +44,63 @@ if [[ -t 0 && -t 1 ]]; then
 fi
 
 # Auto-detect serial device arguments (e.g. `-p /dev/ttyACM0`) and pass them
-# through to the container. To make the device actually readable inside the
-# container we propagate the host user's supplementary groups via
-# `--group-add keep-groups` (requires the crun OCI runtime, which is the
-# Podman default on modern distros). Without it, `--userns=keep-id` maps
-# only the primary UID/GID and `dialout` access is lost.
+# through to the container.
 DEVICE_FLAGS=()
-GROUP_FLAGS=()
 for arg in "$@"; do
   if [[ "$arg" == /dev/tty* || "$arg" == /dev/serial/* ]]; then
     DEVICE_FLAGS+=("--device=$arg")
   fi
 done
-if (( ${#DEVICE_FLAGS[@]} > 0 )); then
-  GROUP_FLAGS+=("--group-add" "keep-groups")
-fi
 
 # Persist ccache / component-manager cache across runs (optional, big speedup).
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/esp-idf-podman"
 mkdir -p "$CACHE_DIR/ccache" "$CACHE_DIR/espressif"
 
-exec "$PODMAN" run --rm \
-  "${TTY_FLAGS[@]}" \
-  "${DEVICE_FLAGS[@]}" \
-  "${GROUP_FLAGS[@]}" \
-  --init \
-  --userns=keep-id \
-  --security-opt label=disable \
-  -v "$FIRMWARE_DIR:/project" \
-  -v "$CACHE_DIR/ccache:/root/.ccache" \
-  -v "$CACHE_DIR/espressif:/root/.espressif" \
-  -w /project \
-  -e IDF_CCACHE_ENABLE=1 \
-  "$IMAGE" \
-  idf.py "$@"
+COMMON_RUN_ARGS=(
+  run --rm
+  "${TTY_FLAGS[@]}"
+  "${DEVICE_FLAGS[@]}"
+  --init
+  -v "$FIRMWARE_DIR:/project"
+  -w /project
+  -e IDF_CCACHE_ENABLE=1
+)
+
+case "$RUNTIME_NAME" in
+  podman|podman-remote)
+    GROUP_FLAGS=()
+    if (( ${#DEVICE_FLAGS[@]} > 0 )); then
+      GROUP_FLAGS+=("--group-add" "keep-groups")
+    fi
+
+    exec "$RUNTIME" "${COMMON_RUN_ARGS[@]}" \
+      "${GROUP_FLAGS[@]}" \
+      --userns=keep-id \
+      --security-opt label=disable \
+      -v "$CACHE_DIR/ccache:/root/.ccache" \
+      -v "$CACHE_DIR/espressif:/root/.espressif" \
+      "$IMAGE" \
+      idf.py "$@"
+    ;;
+
+  docker)
+    DOCKER_USER_FLAGS=("--user" "$(id -u):$(id -g)")
+    for gid in $(id -G); do
+      DOCKER_USER_FLAGS+=("--group-add" "$gid")
+    done
+
+    exec "$RUNTIME" "${COMMON_RUN_ARGS[@]}" \
+      "${DOCKER_USER_FLAGS[@]}" \
+      -v "$CACHE_DIR/ccache:/tmp/.ccache" \
+      -v "$CACHE_DIR/espressif:/tmp/.espressif" \
+      -e HOME=/tmp \
+      -e CCACHE_DIR=/tmp/.ccache \
+      "$IMAGE" \
+      idf.py "$@"
+    ;;
+
+  *)
+    echo "error: unsupported container runtime '$RUNTIME' (expected podman or docker)" >&2
+    exit 2
+    ;;
+esac
