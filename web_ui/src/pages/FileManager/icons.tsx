@@ -1,5 +1,5 @@
-import type { ComponentChildren } from 'preact';
-import sharedStyles from './shared.module.css';
+import type { ComponentChildren } from "preact";
+import sharedStyles from "./shared.module.css";
 
 type IconProps = {
   size?: number;
@@ -8,14 +8,16 @@ type IconProps = {
 function SvgIcon({
   children,
   size = 20,
+  fill = "none",
 }: IconProps & {
   children: ComponentChildren;
+  fill?: string;
 }) {
   return (
     <svg
       aria-hidden="true"
-      class={sharedStyles['icon']}
-      fill="none"
+      class={sharedStyles["icon"]}
+      fill={fill}
       height={size}
       stroke="currentColor"
       strokeLinecap="round"
@@ -41,7 +43,7 @@ export function FileIcon(props: IconProps) {
 
 export function FolderIcon(props: IconProps) {
   return (
-    <SvgIcon {...props}>
+    <SvgIcon fill="currentColor" {...props}>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </SvgIcon>
   );
@@ -138,6 +140,16 @@ export function CheckIcon(props: IconProps) {
   return (
     <SvgIcon {...props}>
       <polyline points="20 6 9 17 4 12" />
+    </SvgIcon>
+  );
+}
+
+export function CancelIcon(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
     </SvgIcon>
   );
 }

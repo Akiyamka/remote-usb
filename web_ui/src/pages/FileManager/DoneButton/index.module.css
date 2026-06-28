@@ -11,3 +11,10 @@
   color: var(--danger-color);
   font-size: 0.9rem;
 }
+
+.doneButton {
+  border-radius: 4px;
+  background-color: var(--accent-bg-color);
+  font-weight: 700;
+  color: var(--accent-text-color);
+}

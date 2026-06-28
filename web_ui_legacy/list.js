@@ -11,9 +11,7 @@ export const List = ({ onDownload, onDelete, onOpen }) => {
         <tr class="list-entry" onclick=${() => onOpen(entry)}>
           <td class="icon">${entry.type === "file" ? FileIcon : FolderIcon}</td>
           <td class="name"><a>${entry.name}</a></td>
-          <td class="size">
-            ${typeof entry.size === "number" ? formatFileSize(entry.size) : ""}
-          </td>
+          <td class="size">${typeof entry.size === "number" ? formatFileSize(entry.size) : ""}</td>
           <td class="actions">
             ${entry.type === "file"
               ? html`<button

@@ -22,15 +22,8 @@
   border-color: transparent !important;
 }
 
-.modalBackdrop {
-  align-items: center;
-  background-color: hsla(0, 0%, 0%, 0.28);
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  padding: 16px;
-  position: fixed;
-  z-index: 20;
+.fileInput {
+  display: none;
 }
 
 .modal {
@@ -38,11 +31,21 @@
   border: 1px solid var(--line-color);
   border-radius: 8px;
   box-shadow: 0 25px 60px hsla(0, 0%, 0%, 0.25);
-  display: flex;
-  flex-flow: column nowrap;
+  color: inherit;
+  margin: auto;
   max-height: min(720px, calc(100vh - 32px));
   max-width: 640px;
-  width: 100%;
+  padding: 0;
+  width: calc(100vw - 32px);
+}
+
+.modal[open] {
+  display: flex;
+  flex-flow: column nowrap;
+}
+
+.modal::backdrop {
+  background-color: hsla(0, 0%, 0%, 0.28);
 }
 
 .modalHeader,
@@ -59,6 +62,7 @@
 
 .modalFooter {
   border-top: 1px solid var(--line-color);
+  gap: 8px;
   justify-content: flex-end;
 }
 
@@ -68,30 +72,6 @@
   margin: 0;
 }
 
-.dropZone {
-  align-items: center;
-  border: 1px dashed hsla(0, 0%, 0%, 0.35);
-  display: flex;
-  gap: 12px;
-  margin: 16px;
-  min-height: 86px;
-  padding: 16px;
-}
-
-.dragging {
-  background-color: hsla(132, 54%, 45%, 0.08);
-  border-color: var(--progress-color);
-}
-
-.dropZone input {
-  display: none;
-}
-
-.dropZone > span {
-  color: var(--muted-color);
-  flex: 1;
-}
-
 .taskList {
   display: flex;
   flex: 1;
@@ -99,7 +79,7 @@
   gap: 6px;
   min-height: 120px;
   overflow: auto;
-  padding: 0 16px 16px;
+  padding: 16px;
 }
 
 .taskEmpty {
@@ -115,11 +95,12 @@
     hsla(132, 100%, 65%, 0.45) var(--file-progress),
     hsla(0, 0%, 100%, 0) var(--file-progress)
   );
-  border: 1px solid var(--line-color);
+  outline: 1px solid var(--line-color);
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 8px 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
 }
 
 .taskMain,
@@ -150,9 +131,9 @@
 
 .taskStatus {
   color: var(--muted-color);
-  font-size: 0.86rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-transform: capitalize;
 }
 
 .task > .taskCancel {
@@ -167,13 +148,6 @@
 .taskFailed,
 .taskCancelled {
   background: transparent;
-}
-
-@media (max-width: 700px) {
-  .dropZone {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 
 @media (prefers-color-scheme: dark) {

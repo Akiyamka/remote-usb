@@ -18,7 +18,7 @@
 .card h1 {
   font-size: clamp(2rem, 8vw, 4rem);
   letter-spacing: -0.06em;
-  line-height: 0.92;
+  line-height: 1.1;
   margin: 0 0 18px;
 }
 
@@ -28,7 +28,6 @@
 }
 
 .eyebrow {
-  color: hsl(216, 80%, 42%) !important;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -40,10 +39,10 @@
 }
 
 .card button {
-  background: hsl(216, 84%, 48%);
+  background-color: var(--accent-bg-color);
   border: 0;
-  border-radius: 999px;
-  color: white;
+  border-radius: 8px;
+  color: var(--accent-text-color);
   cursor: pointer;
   font: inherit;
   font-weight: 700;
@@ -67,10 +66,6 @@
 
   .card p {
     color: hsla(0, 0%, 100%, 0.68);
-  }
-
-  .eyebrow {
-    color: hsl(204, 100%, 68%) !important;
   }
 
   .message {

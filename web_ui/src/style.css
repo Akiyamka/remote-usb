@@ -1,70 +1,81 @@
 :root {
-	font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-	line-height: 1.5;
-	font-weight: 400;
+  --text-color: hsla(0, 0%, 0%, 0.72);
+  --line-color: hsla(0, 0%, 0%, 0.15);
+  --muted-color: hsla(0, 0%, 0%, 0.56);
+  --hover-color: hsla(0, 0%, 0%, 0.05);
+  --danger-color: rgb(176, 42, 42);
+  --progress-color: rgb(54, 172, 82);
 
-	color: #222;
-	background-color: #ffffff;
+  --accent-bg-color: hsl(176.9, 42.7%, 55.5%);
+  --accent-text-color: white;
 
-	font-synthesis: none;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-	-webkit-text-size-adjust: 100%;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: var(--text-color);
+  background-color: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-	margin: 0;
+  margin: 0;
 }
 
 #app {
-	display: flex;
-	flex-direction: column;
-	min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 header {
-	display: flex;
-	justify-content: flex-end;
-	background-color: #673ab8;
+  display: flex;
+  justify-content: flex-end;
+  background-color: #673ab8;
 }
 
 header nav {
-	display: flex;
+  display: flex;
 }
 
 header a {
-	color: #fff;
-	padding: 0.75rem;
-	text-decoration: none;
+  color: #fff;
+  padding: 0.75rem;
+  text-decoration: none;
 }
 
 header a.active {
-	background-color: #0005;
+  background-color: #0005;
 }
 
 header a:hover {
-	background-color: #0008;
+  background-color: #0008;
 }
 
 main {
-	flex: auto;
-	display: flex;
-	align-items: center;
-	max-width: 1280px;
-	margin: 0 auto;
-	text-align: center;
-}
-
-@media (max-width: 639px) {
-	main {
-		margin: 2rem;
-	}
+  flex: auto;
+  display: flex;
+  align-items: center;
+  max-width: 1280px;
+  margin: 0 auto;
+  text-align: center;
 }
 
 @media (prefers-color-scheme: dark) {
-	:root {
-		color: #ccc;
-		background-color: #1a1a1a;
-	}
+  :root {
+    background-color: #1a1a1a;
+    --line-color: hsla(0, 0%, 100%, 0.18);
+    --muted-color: hsla(0, 0%, 100%, 0.55);
+    --hover-color: hsla(0, 0%, 100%, 0.07);
+    --danger-color: hsl(0, 100%, 77.3%);
+    --accent-bg-color: hsl(176.8, 44%, 32.9%);
+
+    --text-color: hsla(0, 0%, 100%, 0.76);
+    --accent-text-color: white;
+  }
 }

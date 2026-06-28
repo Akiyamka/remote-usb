@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'preact/hooks';
-import { CurrentDirLocation } from './CurrentDirLocation/index.jsx';
-import { DirectoryContent } from './DirectoryContent/index.jsx';
-import { DoneButton } from './DoneButton/index.js';
-import { LoadingIndicator } from './LoadingIndicator/index.js';
-import { UploadFileButton } from './UploadFileButton/index.js';
-import { fileManager } from '../../appState.js';
-import { CloseIcon } from './icons.jsx';
-import styles from './FileManagerPage.module.css';
-import sharedStyles from './shared.module.css';
+import { useEffect, useState } from "preact/hooks";
+import { CurrentDirLocation } from "./CurrentDirLocation/index.jsx";
+import { DirectoryContent } from "./DirectoryContent/index.jsx";
+import { SwitchModeButton } from "./DoneButton/index.js";
+import { LoadingIndicator } from "./LoadingIndicator/index.js";
+import { UploadFileButton } from "./UploadFileButton/index.js";
+import { fileManager } from "../../appState.js";
+import { CloseIcon } from "./icons.jsx";
+import styles from "./FileManagerPage.module.css";
+import sharedStyles from "./shared.module.css";
+import { Button } from "#components/Button/index.js";
 
 export function FileManagerPage() {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -18,7 +19,7 @@ export function FileManagerPage() {
 
   return (
     <div
-      class={`${styles['root']} ${isDraggingFiles ? styles['dragging'] : ''}`}
+      class={`${styles["root"]} ${isDraggingFiles ? styles["dragging"] : ""}`}
       onDragEnter={(event) => {
         if (dragEventHasFiles(event)) {
           event.preventDefault();
@@ -28,12 +29,16 @@ export function FileManagerPage() {
       onDragOver={(event) => {
         if (dragEventHasFiles(event)) {
           event.preventDefault();
+          setIsDraggingFiles(true);
         }
       }}
       onDragLeave={(event) => {
-        if (event.currentTarget === event.target) {
+        if (dragEventHasFiles(event) && dragLeftElement(event, event.currentTarget)) {
           setIsDraggingFiles(false);
         }
+      }}
+      onDragEnd={() => {
+        setIsDraggingFiles(false);
       }}
       onDrop={(event) => {
         if (!dragEventHasFiles(event)) {
@@ -46,37 +51,57 @@ export function FileManagerPage() {
         void fileManager.uploadFilesToDevice(files, fileManager.$currentPath.value);
       }}
     >
-      {isDraggingFiles && <div class={styles['dropOverlay']}>Drop files to upload here</div>}
-      <div class={styles['header']}>
+      <div class={styles["header"]}>
         <CurrentDirLocation />
         <UploadFileButton />
       </div>
       <LoadingIndicator />
-      <DirectoryContent />
+      <div class={styles["contentArea"]}>
+        <DirectoryContent />
+        {isDraggingFiles && <div class={styles["dropOverlay"]}>Drop files to upload here</div>}
+      </div>
       {fileManager.$errors.value.length > 0 && (
-        <div class={styles['errors']}>
+        <div class={styles["errors"]}>
           {fileManager.$errors.value.map((message, index) => (
-            <div class={styles['error']} key={`${index}-${message}`}>
+            <div class={styles["error"]} key={`${index}-${message}`}>
               <span>{message}</span>
-              <button
+              <Button ghost={true}
                 aria-label="Dismiss error"
-                class={sharedStyles['iconButton']}
+                class={sharedStyles["iconButton"]}
                 type="button"
                 onClick={() => fileManager.dismissError(index)}
               >
                 <CloseIcon size={16} />
-              </button>
+              </Button>
             </div>
           ))}
         </div>
       )}
-      <div class={styles['footer']}>
-        <DoneButton />
+      <div class={styles["footer"]}>
+        <SwitchModeButton />
       </div>
     </div>
   );
 }
 
 function dragEventHasFiles(event: { dataTransfer: DataTransfer | null }): boolean {
-  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+function dragLeftElement(
+  event: { clientX: number; clientY: number; relatedTarget: EventTarget | null },
+  element: HTMLElement,
+): boolean {
+  const relatedTarget = event.relatedTarget;
+  if (relatedTarget instanceof Node) {
+    return !element.contains(relatedTarget);
+  }
+
+  const rect = element.getBoundingClientRect();
+  return (
+    event.clientX <= rect.left ||
+    event.clientX >= rect.right ||
+    event.clientY <= rect.top ||
+    event.clientY >= rect.bottom
+  );
 }
