@@ -1,4 +1,5 @@
 import { encodePath, joinPath, type PathDescriptor } from './utils/path.js';
+import { t } from './i18n.js';
 
 export type DeviceMode = 'usb' | 'http' | 'switching';
 
@@ -120,7 +121,7 @@ export class RPCError extends Error {
     super(
       details.length > 0
         ? `RPC ${status}: ${details.join(' - ')}`
-        : `RPC ${status}: ${statusText || 'request failed'}`,
+        : `RPC ${status}: ${statusText || t('error.requestFailed')}`,
     );
     this.name = 'RPCError';
     this.status = status;

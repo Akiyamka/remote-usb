@@ -5,6 +5,7 @@ import { StatusOverlay } from '#components/StatusOverlay/index.jsx';
 import { NotFound } from './pages/_404.jsx';
 import { FileManagerPage } from './pages/FileManager/FileManagerPage.jsx';
 import { device } from './appState.js';
+import { currentLanguage } from './i18n.js';
 import { InitialPage } from './pages/InitialPage/index.jsx';
 import './style.css';
 import { EmulationPage } from './pages/EmulationPage/index.jsx';
@@ -37,6 +38,8 @@ function HomePage() {
 
   return <InitialPage />;
 }
+
+document.documentElement.lang = currentLanguage;
 
 render(<App />, document.getElementById('app')!);
 

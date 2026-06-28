@@ -1,3 +1,5 @@
+import { currentLocale, t } from '../i18n.js';
+
 export function formatFileSize(bytes: number | null | undefined): string {
   if (!Number.isFinite(bytes) || bytes === null || bytes === undefined || bytes < 0) {
     return '';
@@ -22,16 +24,16 @@ export function formatFileSize(bytes: number | null | undefined): string {
 
 export function formatMTime(mtime: number | null | undefined): string {
   if (mtime === null || mtime === undefined || !Number.isFinite(mtime)) {
-    return 'unknown';
+    return t('error.unknown');
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(currentLocale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(mtime * 1000));
 }
 
-const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', {
+const relativeTimeFormatter = new Intl.RelativeTimeFormat(currentLocale, {
   numeric: 'auto',
 });
 
@@ -47,7 +49,7 @@ const relativeTimeUnits = [
 
 export function formatRelativeMTime(mtime: number | null | undefined): string {
   if (mtime === null || mtime === undefined || !Number.isFinite(mtime)) {
-    return 'unknown';
+    return t('error.unknown');
   }
 
   const diffSeconds = mtime - Date.now() / 1000;

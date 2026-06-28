@@ -1,4 +1,5 @@
 import { fileManager } from "../../../appState.js";
+import { t } from "../../../i18n.js";
 import type { FileSystemEntry } from "../../../RPCAPI.js";
 import { formatFileSize, formatMTime, formatRelativeMTime } from "../../../utils/format.js";
 import { encodePath } from "../../../utils/path.js";
@@ -12,11 +13,11 @@ export function DirectoryContent() {
   const entries = [...fileManager.$currentList.value].sort(compareEntries);
 
   if (entries.length === 0 && !fileManager.$isLoading.value) {
-    return <div class={styles["empty"]}>This directory is empty.</div>;
+    return <div class={styles["empty"]}>{t("fileManager.emptyDirectory")}</div>;
   }
 
   return (
-    <div class={styles["content"]} role="grid" aria-label="Directory content">
+    <div class={styles["content"]} role="grid" aria-label={t("fileManager.directoryContent")}>
       {entries.map((entry, index) => {
         const pathDescriptor = [...currentPath, entry.name];
         const menuKey = `${entry.type}:${pathDescriptor.join("/")}`;
@@ -43,7 +44,7 @@ export function DirectoryContent() {
               {entry.name}
             </div>
             <div class={styles["entrySize"]} role="gridcell">
-              {entry.type === "file" ? formatFileSize(entry.sizeKb) : "Folder"}
+              {entry.type === "file" ? formatFileSize(entry.sizeKb) : t("fileManager.folder")}
             </div>
             <div class={styles["entryMTime"]} role="gridcell" title={fullMTime}>
               {formatRelativeMTime(entry.mtime)}
@@ -55,7 +56,7 @@ export function DirectoryContent() {
               onKeyDown={(event) => event.stopPropagation()}
             >
               <Button ghost={true}
-                aria-label={`Actions for ${entry.name}`}
+                aria-label={t("fileManager.actionsFor", { name: entry.name })}
                 aria-haspopup="menu"
                 aria-controls={menuId}
                 class={sharedStyles["iconButton"]}
@@ -76,7 +77,7 @@ export function DirectoryContent() {
                     }}
                   >
                     <DownloadIcon size={16} />
-                    <span>Download</span>
+                    <span>{t("fileManager.download")}</span>
                   </Button>
                 )}
                 <Button ghost={true}
@@ -90,7 +91,7 @@ export function DirectoryContent() {
                   }}
                 >
                   <TrashIcon size={16} />
-                  <span>Delete</span>
+                  <span>{t("fileManager.delete")}</span>
                 </Button>
               </div>
             </div>
@@ -144,7 +145,7 @@ async function downloadEntry(pathDescriptor: string[], fileName: string) {
 }
 
 async function deleteEntry(entry: FileSystemEntry, pathDescriptor: string[]) {
-  if (!window.confirm(`Delete "${entry.name}"?`)) {
+  if (!window.confirm(t("fileManager.confirmDelete", { name: entry.name }))) {
     return;
   }
 

@@ -5,6 +5,7 @@ import { SwitchModeButton } from "./DoneButton/index.js";
 import { LoadingIndicator } from "./LoadingIndicator/index.js";
 import { UploadFileButton } from "./UploadFileButton/index.js";
 import { fileManager } from "../../appState.js";
+import { t } from "../../i18n.js";
 import { CloseIcon } from "./icons.jsx";
 import styles from "./FileManagerPage.module.css";
 import sharedStyles from "./shared.module.css";
@@ -58,7 +59,7 @@ export function FileManagerPage() {
       <LoadingIndicator />
       <div class={styles["contentArea"]}>
         <DirectoryContent />
-        {isDraggingFiles && <div class={styles["dropOverlay"]}>Drop files to upload here</div>}
+        {isDraggingFiles && <div class={styles["dropOverlay"]}>{t("fileManager.dropOverlay")}</div>}
       </div>
       {fileManager.$errors.value.length > 0 && (
         <div class={styles["errors"]}>
@@ -66,7 +67,7 @@ export function FileManagerPage() {
             <div class={styles["error"]} key={`${index}-${message}`}>
               <span>{message}</span>
               <Button ghost={true}
-                aria-label="Dismiss error"
+                aria-label={t("fileManager.dismissError")}
                 class={sharedStyles["iconButton"]}
                 type="button"
                 onClick={() => fileManager.dismissError(index)}

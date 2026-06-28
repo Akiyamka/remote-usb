@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "preact/hooks";
 import { fileManager } from "../../../appState.js";
+import { t } from "../../../i18n.js";
 import { formatFileSize } from "../../../utils/format.js";
 import { CancelIcon, CloseIcon, UploadIcon } from "../icons.jsx";
 import styles from "./index.module.css";
@@ -54,10 +55,10 @@ export function UploadFileButton() {
         }}
       />
       <Button ghost={true}
-        aria-label="Upload files"
+        aria-label={t("upload.uploadFiles")}
         class={`${styles["button"]} ${overallProgress.isActive ? styles["active"] : ""}`}
         style={`--upload-progress: ${overallProgress.percent}%`}
-        title="Upload files"
+        title={t("upload.uploadFiles")}
         type="button"
         onClick={() => {
           inputRef.current?.click();
@@ -67,7 +68,7 @@ export function UploadFileButton() {
       </Button>
 
       <dialog
-        aria-label="Upload files"
+        aria-label={t("upload.uploadFiles")}
         class={styles["modal"]}
         ref={dialogRef}
         onClose={() => {
@@ -75,9 +76,9 @@ export function UploadFileButton() {
         }}
       >
         <div class={styles["modalHeader"]}>
-          <h2>Upload files</h2>
+          <h2>{t("upload.uploadFiles")}</h2>
           <Button ghost={true}
-            aria-label="Close upload dialog"
+            aria-label={t("upload.closeDialog")}
             class={sharedStyles["iconButton"]}
             type="button"
             onClick={() => {
@@ -90,7 +91,7 @@ export function UploadFileButton() {
 
         <div class={styles["taskList"]}>
           {tasks.length === 0 ? (
-            <div class={styles["taskEmpty"]}>No uploads yet.</div>
+            <div class={styles["taskEmpty"]}>{t("upload.noUploads")}</div>
           ) : (
             tasks.map((task) => (
               <div
@@ -113,7 +114,7 @@ export function UploadFileButton() {
                 {task.status === "queued" || task.status === "uploading" ? (
                   <Button ghost={true}
                     class={`${sharedStyles["iconButton"]} ${styles["taskCancel"]}`}
-                    title="Cancel upload"
+                    title={t("upload.cancelUpload")}
                     type="button"
                     onClick={() => fileManager.cancelUpload(task.id)}
                   >
@@ -141,7 +142,7 @@ export function UploadFileButton() {
             type="button"
             onClick={() => modalInputRef.current?.click()}
           >
-            Select files
+            {t("upload.selectFiles")}
           </Button>
           {tasks.some(
             ({ status }) => status === "done" || status === "failed" || status === "cancelled",
@@ -151,7 +152,7 @@ export function UploadFileButton() {
               type="button"
               onClick={() => fileManager.clearSettledUploads()}
             >
-              Clear finished
+              {t("upload.clearFinished")}
             </Button>
           )}
         </div>
@@ -183,10 +184,21 @@ function getOverallProgress(tasks: typeof fileManager.$uploadTasks.value): Uploa
 
 function taskLabel(status: string, percent: number | null): string {
   if (status === "uploading") {
-    return percent === null ? "uploading" : `${Math.round(percent)}%`;
+    return percent === null ? t("upload.status.uploading") : `${Math.round(percent)}%`;
   }
 
-  return status;
+  switch (status) {
+    case "queued":
+      return t("upload.status.queued");
+    case "done":
+      return t("upload.status.done");
+    case "failed":
+      return t("upload.status.failed");
+    case "cancelled":
+      return t("upload.status.cancelled");
+    default:
+      return status;
+  }
 }
 
 function uploadTaskStatusClass(status: string): string {

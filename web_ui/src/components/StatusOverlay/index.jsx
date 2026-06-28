@@ -1,4 +1,5 @@
 import { device } from '../../appState.js';
+import { t } from '../../i18n.js';
 import styles from './index.module.css';
 
 export function StatusOverlay() {
@@ -14,12 +15,11 @@ export function StatusOverlay() {
     <div class={styles['stack']} aria-live="polite">
       {mismatch !== null && (
         <div class={`${styles['banner']} ${styles['warning']}`}>
-          Web UI API mismatch: expected v{mismatch.expected}, device reports v{mismatch.actual}.
-          Rebuild and reflash the web UI partition.
+          {t('status.apiMismatch', { expected: mismatch.expected, actual: mismatch.actual })}
         </div>
       )}
       {errorMessage !== null && <div class={`${styles['banner']} ${styles['error']}`}>{errorMessage}</div>}
-      {isConnecting && <div class={styles['banner']}>Connecting to device...</div>}
+      {isConnecting && <div class={styles['banner']}>{t('app.connecting')}</div>}
     </div>
   );
 }

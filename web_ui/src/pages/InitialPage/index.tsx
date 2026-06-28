@@ -1,7 +1,5 @@
+import { t } from '../../i18n.js';
+
 export function InitialPage() {
-  return (
-    <div>
-      Connecting to device...
-    </div>
-  );
+  return <div>{t('app.connecting')}</div>;
 }

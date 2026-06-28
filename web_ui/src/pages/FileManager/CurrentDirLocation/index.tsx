@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { fileManager } from "../../../appState.js";
+import { t } from "../../../i18n.js";
 import {
   ArrowUpIcon,
   CheckIcon,
@@ -35,9 +36,9 @@ export function CurrentDirLocation() {
     <div class={styles["root"]}>
       <Button
         ghost={true}
-        aria-label="Go to root directory"
+        aria-label={t("navigation.goToRootDirectory")}
         class={sharedStyles["iconButton"]}
-        title="Root directory"
+        title={t("navigation.rootDirectory")}
         type="button"
         onClick={() => openDirectory([])}
       >
@@ -50,18 +51,18 @@ export function CurrentDirLocation() {
           onSubmit={(event) => void submitPath(event, editablePath, setIsEditing)}
         >
           <input
-            aria-label="Current path"
+            aria-label={t("navigation.currentPath")}
             autoFocus
             value={editablePath}
             onInput={(event) => setEditablePath(event.currentTarget.value)}
           />
-          <Button ghost={true} class={sharedStyles["iconButton"]} title="Open path" type="submit">
+          <Button ghost={true} class={sharedStyles["iconButton"]} title={t("navigation.openPath")} type="submit">
             <CheckIcon />
           </Button>
           <Button
             ghost={true}
             class={sharedStyles["iconButton"]}
-            title="Cancel editing"
+            title={t("navigation.cancelEditing")}
             type="button"
             onClick={() => {
               setEditablePath(currentPath.join("/"));
@@ -76,10 +77,10 @@ export function CurrentDirLocation() {
           <div class={styles["breadcrumbs"]} ref={scrollRef}>
             <Button
               ghost={true}
-              aria-label="Go to parent directory"
+              aria-label={t("navigation.goToParentDirectory")}
               class={`${sharedStyles["iconButton"]} ${styles["up"]}`}
               disabled={currentPath.length === 0}
-              title="Parent directory"
+              title={t("navigation.parentDirectory")}
               type="button"
               onClick={openParentDirectory}
             >
@@ -101,9 +102,9 @@ export function CurrentDirLocation() {
           </div>
           <Button
             ghost={true}
-            aria-label="Edit current path"
+            aria-label={t("navigation.editCurrentPath")}
             class={sharedStyles["iconButton"]}
-            title="Edit path"
+            title={t("navigation.editPath")}
             type="button"
             onClick={() => setIsEditing(true)}
           >
@@ -111,9 +112,9 @@ export function CurrentDirLocation() {
           </Button>
           <Button
             ghost={true}
-            aria-label="Create directory"
+            aria-label={t("navigation.createDirectory")}
             class={sharedStyles["iconButton"]}
-            title="Create directory"
+            title={t("navigation.createDirectory")}
             type="button"
             onClick={() => createDirectoryPrompt(currentPath)}
           >
@@ -146,7 +147,7 @@ async function submitPath(
   event.preventDefault();
   const nextPath = parseEditablePath(editablePath);
   if (nextPath === null) {
-    fileManager.pushError("Invalid path.");
+    fileManager.pushError(t("error.invalidPath"));
     return;
   }
 
@@ -168,7 +169,7 @@ function parseEditablePath(value: string): string[] | null {
 }
 
 function createDirectoryPrompt(currentPath: string[]) {
-  const value = window.prompt("New directory path");
+  const value = window.prompt(t("navigation.newDirectoryPath"));
   if (value === null) {
     return;
   }
@@ -176,7 +177,7 @@ function createDirectoryPrompt(currentPath: string[]) {
   const parts = parseEditablePath(value);
 
   if (parts === null || parts.length === 0) {
-    fileManager.pushError("Invalid directory path.");
+    fileManager.pushError(t("error.invalidDirectoryPath"));
     return;
   }
 

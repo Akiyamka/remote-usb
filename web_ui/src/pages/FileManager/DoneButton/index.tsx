@@ -1,8 +1,8 @@
 import { useState } from "preact/hooks";
 import { device, fileManager } from "../../../appState.js";
+import { t } from "../../../i18n.js";
 import { RPCError } from "../../../RPCAPI.js";
 import styles from "./index.module.css";
-import sharedStyles from "../shared.module.css";
 import clsx from "clsx";
 import { Button } from "#components/Button/index.js";
 
@@ -12,7 +12,7 @@ export function SwitchModeButton() {
 
   const switchToStorageMode = async () => {
     if (fileManager.hasActiveUploads()) {
-      setMessage("Uploads are still running.");
+      setMessage(t("modeSwitch.uploadsRunning"));
       return;
     }
 
@@ -24,7 +24,7 @@ export function SwitchModeButton() {
     } catch (error) {
       setMessage(
         fileManager.$hasTransferredFiles.value
-          ? `${modeSwitchErrorMessage(error)} The transferred files are still on the SD card.`
+          ? t("modeSwitch.transferredFilesRemain", { message: modeSwitchErrorMessage(error) })
           : modeSwitchErrorMessage(error),
       );
     } finally {
@@ -41,7 +41,7 @@ export function SwitchModeButton() {
         type="button"
         onClick={switchToStorageMode}
       >
-        {isSwitching ? "Switching..." : "Switch to USB Storage mode"}
+        {isSwitching ? t("modeSwitch.switching") : t("modeSwitch.switchToUsb")}
       </Button>
       {message !== null && <div class={styles["message"]}>{message}</div>}
     </div>
@@ -51,15 +51,15 @@ export function SwitchModeButton() {
 function modeSwitchErrorMessage(error: unknown): string {
   if (error instanceof RPCError && error.status === 409) {
     if (error.reason === "active_upload") {
-      return "Uploads are still running.";
+      return t("modeSwitch.uploadsRunning");
     }
     if (error.reason === "host_io_active") {
-      return "The USB host is still using the card. Try again after it goes idle.";
+      return t("modeSwitch.hostIoActive");
     }
     if (error.reason === "switch_in_progress") {
-      return "Another mode switch is already running. Try again in a moment.";
+      return t("modeSwitch.switchInProgress");
     }
-    return "The device is busy. Try again in a moment.";
+    return t("modeSwitch.deviceBusy");
   }
 
   return error instanceof Error ? error.message : String(error);
