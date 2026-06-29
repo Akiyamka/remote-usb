@@ -33,6 +33,14 @@ bool __attribute__((weak)) usb_msc_is_busy(void)
     return false;
 }
 
+void __attribute__((weak)) usb_msc_connect_to_host(void)
+{
+}
+
+void __attribute__((weak)) usb_msc_disconnect_from_host(void)
+{
+}
+
 const char *sd_owner_name(sd_owner_t owner)
 {
     switch (owner) {
@@ -99,6 +107,7 @@ esp_err_t sd_owner_switch_to_msc(void)
 
     s_owner = SD_OWNER_MSC;
     usb_msc_set_media_present(true);
+    usb_msc_connect_to_host();
 
     ESP_LOGI(TAG, "owner -> %s", sd_owner_name(s_owner));
     xSemaphoreGive(s_owner_mutex);
@@ -125,6 +134,10 @@ esp_err_t sd_owner_switch_to_fatfs(void)
             return ESP_ERR_INVALID_STATE;
         }
 
+        // Embedded hosts often rescan only after a real USB disconnect.
+        // Detach before reporting no media, otherwise they may keep stale state.
+        usb_msc_disconnect_from_host();
+        vTaskDelay(pdMS_TO_TICKS(500));
         usb_msc_set_media_present(false);
         vTaskDelay(pdMS_TO_TICKS(200));
 
@@ -179,6 +192,9 @@ esp_err_t sd_owner_release(void)
             xSemaphoreGive(s_owner_mutex);
             return ESP_ERR_INVALID_STATE;
         }
+        // See sd_owner_switch_to_fatfs(): detach before hiding the medium.
+        usb_msc_disconnect_from_host();
+        vTaskDelay(pdMS_TO_TICKS(500));
         usb_msc_set_media_present(false);
         vTaskDelay(pdMS_TO_TICKS(200));
         ret = sd_raw_sync();

@@ -128,7 +128,10 @@ components/storage/sd_owner.c
 **Steps.**
 1. Declare `sd_owner_t` enum, owner mutex, current state.
 2. Implement `sd_owner_switch_to_fatfs/_to_msc/_release` exactly as in §8.2.
-3. **Important nuance:** `sd_owner_switch_to_msc` calls `usb_msc_set_media_present(true)`.
+3. **Important nuance:** `sd_owner_switch_to_msc` calls
+   `usb_msc_set_media_present(true)` and `usb_msc_connect_to_host()`.
+   `sd_owner_switch_to_fatfs` disconnects from the USB host before reporting
+   media removal.
    To avoid a circular dependency between components:
    - `components/storage` declares an external weak symbol, or takes a callback in `sd_owner_init(usb_msc_cb_t cb)`,
    - or uses an event-based approach via `esp_event` (recommended).
@@ -149,7 +152,7 @@ components/storage/sd_owner.c
 components/usb_msc/
   ├── CMakeLists.txt
   ├── include/usb_msc.h
-  ├── usb_msc.c            # init + media_present + tud_msc_* callbacks
+  ├── usb_msc.c            # init + host connect/disconnect + media_present + tud_msc_* callbacks
   ├── usb_descriptors.c    # tusb_desc_device_t, configuration desc, strings
   └── tusb_config.h
 ```
@@ -161,10 +164,11 @@ components/usb_msc/
    Serial number generated from MAC in `usb_msc_init`.
 3. `usb_msc.c`:
    - `usb_msc_init` — `tinyusb_driver_install(&cfg)`.
+   - `usb_msc_connect_to_host` / `usb_msc_disconnect_from_host` — wrappers around `tud_connect()` / `tud_disconnect()`.
    - All `tud_msc_*` callbacks exactly as in spec §9.4.
    - `s_media_present`, `s_io_in_progress`, `s_last_io_ms`.
 4. Wire up the call from `sd_owner.c` (callback / event).
-5. **Standalone test (without sd_owner):** temporary code in `app_main` — `sd_raw_init() → usb_msc_init() → usb_msc_set_media_present(true)`. The card shows up as `/dev/sdX` on Linux.
+5. **Standalone test (without sd_owner):** temporary code in `app_main` — `sd_raw_init() → usb_msc_set_media_present(true) → usb_msc_init()`. The card shows up as `/dev/sdX` on Linux with non-zero capacity on first scan.
 
 **Definition of Done.**
 - `dmesg`: device enumerates as `Wireless Drive` < 2 s after plug-in.
@@ -420,13 +424,14 @@ components/ui/
 **Initialization order in `app_main` (fixed by §14):**
 1. `nvs_flash_init`.
 2. `ui_state_init` / `ui_led_init` (bsp + ui).
-3. `usb_msc_init` (BEFORE `wifi_mgr_init` — otherwise USB enumeration breaks, §16).
-4. `webfs_mount`.
-5. `sd_owner_init` → `sd_owner_switch_to_fatfs`.
-6. `wifi_cfg_read_*`.
-7. `wifi_mgr_init` + `wifi_mgr_connect`.
-8. `http_server_start` (only on Wi-Fi success).
-9. Final mode (HTTP or USB fallback).
+3. `webfs_mount`.
+4. `sd_owner_init` → `sd_owner_switch_to_fatfs`.
+5. `wifi_cfg_read_*`.
+6. `wifi_mgr_init` + `wifi_mgr_connect`.
+7. `http_server_start` (only on Wi-Fi success).
+8. Final mode:
+   - HTTP success: keep FATFS owner.
+   - USB fallback: `sd_owner_switch_to_msc()` then lazy `usb_msc_init()`.
 
 ---
 
@@ -437,8 +442,8 @@ These are mirrored into the code as warning comments at the relevant sites:
 1. **`sd_raw_get_sector_count` ALWAYS returns `csd.capacity`**, never `total_bytes/512` (§6.3, §16).
 2. **`sd_fatfs_deinit` ALWAYS called before switching to MSC or ERROR** (§7, §16).
 3. **`bcdUSB = 0x0200`** in the device descriptor — otherwise embedded hosts break (§9.2).
-4. **`usb_msc_init` ALWAYS called**, even when the initial mode is USB (§9.5).
-5. **`usb_msc_init` BEFORE `wifi_mgr_init`** (§16).
+4. **USB MSC is exposed only after the SD card is ready in MSC mode** (§9.5, §16).
+5. **USB→HTTP detaches from the USB host before `media_present=false`** (§8.2, §16).
 6. **`s_upload_in_progress` cleared through a single exit point** (§11.4).
 7. **Every error path in `handle_file_upload` calls `remove(full_path)`** (§11.4).
 8. **Every URL-derived path goes through `extract_and_validate_path`** (§11.6).
@@ -451,7 +456,7 @@ These are mirrored into the code as warning comments at the relevant sites:
 
 | Question | Options | Recommendation |
 |---|---|---|
-| How does `sd_owner` call `usb_msc_set_media_present` | direct call / weak symbol / `esp_event` | `esp_event` — cleanest |
+| How does `sd_owner` call USB MSC hooks | direct call / weak symbol / `esp_event` | weak symbols, implemented by `usb_msc` strong hooks |
 | Where does fw_version live | `#define` in `version.h` / `idf.py`-generated / CMake | `#define FW_VERSION "0.0.3"` in `version.h` |
 | LCD fonts | single 8x16 / dual (8x16 + 16x32 for IP) | start with 8x16, add larger if needed |
 | Web UI compression | vite plugin / separate shell step | `vite-plugin-compression` — simpler |

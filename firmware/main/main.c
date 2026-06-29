@@ -120,9 +120,6 @@ void app_main(void)
     ui_led_init();
     ui_state_show(UI_BOOT_WELCOME);
 
-    ESP_ERROR_CHECK(usb_msc_init());
-    usb_msc_set_media_present(false);
-
     esp_err_t ret = webfs_mount();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Web UI partition mount failed: %s", esp_err_to_name(ret));
@@ -192,6 +189,11 @@ void app_main(void)
     ret = sd_owner_switch_to_msc();
     if (ret != ESP_OK) {
         startup_error(UI_ERROR_GENERIC, "sd_owner_switch_to_msc failed", ret);
+    }
+
+    ret = usb_msc_init();
+    if (ret != ESP_OK) {
+        startup_error(UI_ERROR_GENERIC, "usb_msc_init failed", ret);
     }
 
     ui_state_show(UI_MODE_USB);

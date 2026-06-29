@@ -68,6 +68,26 @@ esp_err_t usb_msc_init(void)
     return ESP_OK;
 }
 
+void usb_msc_connect_to_host(void)
+{
+    if (!s_initialized) {
+        return;
+    }
+
+    tud_connect();
+    ESP_LOGI(TAG, "USB host connection enabled");
+}
+
+void usb_msc_disconnect_from_host(void)
+{
+    if (!s_initialized) {
+        return;
+    }
+
+    tud_disconnect();
+    ESP_LOGI(TAG, "USB host connection disabled");
+}
+
 void usb_msc_set_media_present(bool present)
 {
     s_media_present = present;

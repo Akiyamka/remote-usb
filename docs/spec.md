@@ -133,6 +133,12 @@ This yields user-friendly behavior: if something is wrong with Wi-Fi, the user p
 - `STATE_HTTP_MODE` → FATFS stays
 - `STATE_USB_MODE` → `sd_fatfs_deinit()` + `sd_raw_init()`
 
+**USB MSC is not exposed to the host until the card is ready.** The USB stack is
+installed only when the device actually enters USB mode. This avoids the host
+seeing a Mass Storage device with `MEDIUM_NOT_PRESENT` or zero capacity during
+boot. Runtime USB↔HTTP switches must also look like physical unplug/replug
+events to embedded hosts.
+
 **wifi.cfg format** (simple INI-style):
 ```ini
 ssid=MyHomeWiFi
@@ -410,6 +416,8 @@ esp_err_t sd_owner_release(void);  // to SD_OWNER_NONE
 ```c
 void usb_msc_set_media_present(bool present);
 bool usb_msc_is_busy(void);
+void usb_msc_connect_to_host(void);
+void usb_msc_disconnect_from_host(void);
 ```
 
 In Phase 3 these weak defaults keep switching testable without USB MSC. In
@@ -452,8 +460,9 @@ esp_err_t sd_owner_switch_to_msc(void)
 
     s_owner = SD_OWNER_MSC;
 
-    // Signal the USB MSC module that the media is now available
+    // Signal the USB MSC module that the media is now available, then expose it.
     usb_msc_set_media_present(true);
+    usb_msc_connect_to_host();
 
     xSemaphoreGive(s_owner_mutex);
     return ESP_OK;
@@ -474,6 +483,9 @@ esp_err_t sd_owner_switch_to_fatfs(void)
             xSemaphoreGive(s_owner_mutex);
             return ESP_ERR_INVALID_STATE;
         }
+        // Embedded hosts often rescan only after a real USB disconnect.
+        usb_msc_disconnect_from_host();
+        vTaskDelay(pdMS_TO_TICKS(500));
         usb_msc_set_media_present(false);
         // Let TinyUSB process any remaining SCSI commands
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -506,6 +518,8 @@ esp_err_t sd_owner_release(void)
             xSemaphoreGive(s_owner_mutex);
             return ESP_ERR_INVALID_STATE;
         }
+        usb_msc_disconnect_from_host();
+        vTaskDelay(pdMS_TO_TICKS(500));
         usb_msc_set_media_present(false);
         vTaskDelay(pdMS_TO_TICKS(200));
         ret = sd_raw_sync();
@@ -619,13 +633,20 @@ uint8_t const desc_configuration[] = {
 4. EP MaxPacketSize = 64 (Full Speed)
 5. Inquiry strings — neutral, without "Espressif"
 
-### 9.3. MSC API with "media present" flag support
+### 9.3. MSC API with media and host-connection control
 
 ```c
 // usb_msc.h
 esp_err_t usb_msc_init(void);
 
+// Controls whether the USB device is visible to the host. Runtime mode
+// switches use this to emulate physical unplug/replug instead of only changing
+// READ CAPACITY from/to zero.
+void usb_msc_connect_to_host(void);
+void usb_msc_disconnect_from_host(void);
+
 // Controls media presence as seen by the host.
+// During normal switching this is changed only after the USB host is detached.
 // When false: host sees "card not inserted" (Sense: NOT_READY / MEDIUM_NOT_PRESENT)
 // When true: SD is accessible via sd_raw_*
 void usb_msc_set_media_present(bool present);
@@ -651,6 +672,16 @@ void usb_msc_set_media_present(bool present)
 {
     s_media_present = present;
     ESP_LOGI(TAG, "Media presence: %s", present ? "INSERTED" : "REMOVED");
+}
+
+void usb_msc_connect_to_host(void)
+{
+    if (s_initialized) tud_connect();
+}
+
+void usb_msc_disconnect_from_host(void)
+{
+    if (s_initialized) tud_disconnect();
 }
 
 bool usb_msc_is_busy(void)
@@ -763,7 +794,7 @@ bool tud_msc_is_writable_cb(uint8_t lun)
 }
 ```
 
-### 9.5. Initialization (called once at startup)
+### 9.5. Initialization (lazy, when entering USB mode)
 
 ```c
 esp_err_t usb_msc_init(void)
@@ -787,7 +818,11 @@ esp_err_t usb_msc_init(void)
 }
 ```
 
-**Important**: `usb_msc_init()` is **always** called at device startup, regardless of which initial mode is selected. The USB stack comes up, but `s_media_present = false` until `sd_owner` switches into MSC.
+**Important**: `usb_msc_init()` is **not** called at device startup. It is
+called only after `sd_owner_switch_to_msc()` has made raw SD access ready. On
+the first USB entry this makes the first MSC enumeration immediately report a
+ready medium and non-zero capacity. On later HTTP→USB entries, `sd_owner` uses
+`tud_connect()` so the host sees a fresh USB insertion.
 
 ---
 
@@ -1595,11 +1630,7 @@ void app_main(void)
     ui_led_init();
     ui_state_show(UI_BOOT_WELCOME);
 
-    // ===== 2. USB MSC is always initialized =====
-    // (media_present=false, the host will see "no media" until sd_owner allows it)
-    ESP_ERROR_CHECK(usb_msc_init());
-
-    // ===== 2.5. Mount the web UI (LittleFS, independent of SD) =====
+    // ===== 2. Mount the web UI (LittleFS, independent of SD) =====
     if (webfs_mount() != ESP_OK) {
         ESP_LOGW(TAG, "Web UI partition mount failed — HTTP server will 404 on static");
         // Not fatal: the API works, only static assets return errors
@@ -1684,6 +1715,11 @@ void app_main(void)
             ui_state_show(UI_ERROR_GENERIC);
             startup_error_loop();
         }
+        ret = usb_msc_init();
+        if (ret != ESP_OK) {
+            ui_state_show(UI_ERROR_GENERIC);
+            startup_error_loop();
+        }
         ui_state_show(UI_MODE_USB);
     }
 
@@ -1701,6 +1737,7 @@ void app_main(void)
 | Test | Method | Criterion |
 |---|---|---|
 | Linux enumeration | `dmesg -w` on connect | From "new full-speed" to "Attached SCSI removable disk" < 2 sec |
+| First USB entry has ready media | `dmesg -w` on connect | No `Media removed` and no `capacity change from 0` before partition scan |
 | No "extends beyond EOD" | `dmesg` | Message does not appear |
 | No "Volume not properly unmounted" | After HTTP→USB switch | Message does not appear |
 | Windows recognition | Plug into Win 10/11 | Appears in Explorer < 5 sec |
@@ -1726,8 +1763,9 @@ void app_main(void)
 | Test | Criterion |
 |---|---|
 | HTTP→USB: `POST /api/mode/usb` while idle | 200 OK, mode = usb, host sees the flash drive |
+| HTTP→USB after upload | Host sees a new USB enumeration, not only capacity 0→N |
 | HTTP→USB during an active upload | 409 Conflict, mode does not change |
-| USB→HTTP: `POST /api/mode/http` while idle | 200 OK, mode = http, files accessible |
+| USB→HTTP: `POST /api/mode/http` while idle | 200 OK, mode = http, host sees USB disconnect, files accessible |
 | USB→HTTP while the host is writing | 409 Conflict, mode does not change |
 | USB↔HTTP loop 50 times | FAT is not corrupted, files intact |
 | Write via HTTP → switch to USB → file visible to host | File identical |
@@ -1773,14 +1811,15 @@ void app_main(void)
 | "extends beyond EOD" | Capacity ≠ physical capacity | `s_card->csd.capacity`, not `totalBytes()/512` |
 | "Volume not properly unmounted" | FATFS not unmounted before switch | `sd_fatfs_deinit()` in `sd_owner_switch_to_msc()` |
 | SCSI DID_TIME_OUT | 1-bit SDMMC or stuck USB task | Check `SDMMC_HOST_FLAG_4BIT`, split tasks across cores |
-| 3D printer can't see device | bcdUSB 0x0210 or bad inquiry strings | bcdUSB = 0x0200, ASCII strings |
-| Windows recognizes slowly | Capacity bug + retries | Fix capacity |
+| 3D printer can't see device | bcdUSB 0x0210, bad inquiry strings, or MSC enumerated before media is ready | bcdUSB = 0x0200, ASCII strings, defer `usb_msc_init()` until USB mode |
+| New HTTP-uploaded file not visible on printer after switching back to USB | Host did not see a real USB replug | `tud_disconnect()` before leaving USB mode, `tud_connect()` after returning to MSC |
+| Windows recognizes slowly | Capacity bug + retries, or host saw zero-capacity media first | Fix capacity; expose MSC only after `sd_raw_init()` succeeds |
 | Crash during concurrent switch | Race condition | Mutex on switch, busy-flag check |
 | HTTP file API returns 404 in HTTP mode | Wrong sd_owner | Check `sd_owner_current() == SD_OWNER_FATFS` |
-| Host gets I/O error after HTTP switch | Correct (media removed), but poor UX | API returns 409 when `usb_msc_is_busy()` |
+| Host gets I/O error after HTTP switch | Media was hidden while USB remained connected | Detach USB from host before `usb_msc_set_media_present(false)` |
 | Wi-Fi slow when the host is actively writing | CPU contention | Wi-Fi on core 0, HTTP/UI on core 1 |
 | Card not in 4-bit | Bad pull-ups on D1-D3 | Check the flag after init, inspect routing |
-| "device descriptor read error -110" | USB stack crashes | Bring `usb_msc_init` up BEFORE `wifi_mgr_init` |
+| "device descriptor read error -110" | USB stack crashes or bad detach/attach timing | Check TinyUSB task health and the USB disconnect/connect delay |
 | `s_upload_in_progress` stuck true | Not cleared on error/exception | Clear via a single exit point before each return |
 | Web UI does not load (404 everywhere) | webfs not mounted or image not flashed | Check `webfs_mount()` log, re-flash the LittleFS image |
 | Old UI after reflash | Browser cache, or webfs image not updated | Versioned `api_version` check, hard refresh, re-flash the image |
