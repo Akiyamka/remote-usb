@@ -275,6 +275,92 @@ esp_err_t bsp_lcd_clear(uint16_t color)
     return bsp_lcd_fill_rect(0, 0, BSP_LCD_WIDTH, BSP_LCD_HEIGHT, color);
 }
 
+static uint16_t blend_rgb565(uint16_t fg, uint16_t bg, uint8_t alpha)
+{
+    if (alpha == 0) {
+        return bg;
+    }
+    if (alpha == 255) {
+        return fg;
+    }
+
+    const uint32_t inv = 255u - alpha;
+    const uint32_t fg_r = (fg >> 11) & 0x1fu;
+    const uint32_t fg_g = (fg >> 5) & 0x3fu;
+    const uint32_t fg_b = fg & 0x1fu;
+    const uint32_t bg_r = (bg >> 11) & 0x1fu;
+    const uint32_t bg_g = (bg >> 5) & 0x3fu;
+    const uint32_t bg_b = bg & 0x1fu;
+
+    const uint32_t r = (fg_r * alpha + bg_r * inv + 127u) / 255u;
+    const uint32_t g = (fg_g * alpha + bg_g * inv + 127u) / 255u;
+    const uint32_t b = (fg_b * alpha + bg_b * inv + 127u) / 255u;
+
+    return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
+esp_err_t bsp_lcd_draw_alpha_mask(int16_t x, int16_t y,
+                                  uint16_t w, uint16_t h,
+                                  const uint8_t *alpha,
+                                  uint16_t color, uint16_t bg)
+{
+    if (!s_inited) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (alpha == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (w == 0 || h == 0) {
+        return ESP_OK;
+    }
+
+    int32_t x0 = x;
+    int32_t y0 = y;
+    int32_t x1 = (int32_t)x + w;
+    int32_t y1 = (int32_t)y + h;
+    if (x0 >= BSP_LCD_WIDTH || y0 >= BSP_LCD_HEIGHT || x1 <= 0 || y1 <= 0) {
+        return ESP_OK;
+    }
+
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > BSP_LCD_WIDTH) x1 = BSP_LCD_WIDTH;
+    if (y1 > BSP_LCD_HEIGHT) y1 = BSP_LCD_HEIGHT;
+
+    const uint16_t clip_w = (uint16_t)(x1 - x0);
+    const uint16_t clip_h = (uint16_t)(y1 - y0);
+    uint16_t slice_h = (uint16_t)(BSP_LCD_TILE_PIXELS / clip_w);
+    if (slice_h == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const uint16_t src_x0 = (uint16_t)(x0 - x);
+    const uint16_t src_y0 = (uint16_t)(y0 - y);
+    for (uint16_t y_done = 0; y_done < clip_h; y_done = (uint16_t)(y_done + slice_h)) {
+        const uint16_t this_h =
+            (clip_h - y_done) < slice_h ? (uint16_t)(clip_h - y_done) : slice_h;
+
+        for (uint16_t row = 0; row < this_h; ++row) {
+            const uint16_t src_y = (uint16_t)(src_y0 + y_done + row);
+            for (uint16_t col = 0; col < clip_w; ++col) {
+                const uint16_t src_x = (uint16_t)(src_x0 + col);
+                const uint8_t a = alpha[(uint32_t)src_y * w + src_x];
+                s_tile[(uint32_t)row * clip_w + col] =
+                    to_be565(blend_rgb565(color, bg, a));
+            }
+        }
+
+        esp_err_t err = draw_bitmap_sync((int)x0, (int)(y0 + y_done),
+                                         (int)x1, (int)(y0 + y_done + this_h),
+                                         s_tile);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    return ESP_OK;
+}
+
 // ---------------------------------------------------------------------------
 // Glyph rasterisation
 // ---------------------------------------------------------------------------

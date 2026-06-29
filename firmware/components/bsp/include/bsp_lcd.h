@@ -59,6 +59,13 @@ esp_err_t bsp_lcd_clear(uint16_t color);
 esp_err_t bsp_lcd_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                             uint16_t color);
 
+// Draw a single-colour image with an 8-bit alpha mask. `alpha` is a row-major
+// w × h byte array; 0 is transparent, 255 is fully `color`.
+esp_err_t bsp_lcd_draw_alpha_mask(int16_t x, int16_t y,
+                                  uint16_t w, uint16_t h,
+                                  const uint8_t *alpha,
+                                  uint16_t color, uint16_t bg);
+
 // Draw a NUL-terminated UTF-8 string (ASCII subset honoured) at pixel
 // position (x, y) — y is the TOP of the line — using the named bitmap
 // font. Each glyph cell is `adv_w x line_height` and gets cleared to `bg`

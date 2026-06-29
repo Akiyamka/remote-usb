@@ -16,6 +16,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "ui_led.h"
+#include "ui_logo.h"
 
 static const char *TAG = "ui_state";
 
@@ -154,6 +155,75 @@ static void draw_centered_fit(int16_t y, font_size_t font, const char *text,
     draw_centered(y, font, fitted, fg);
 }
 
+static void draw_text_at(int16_t x, int16_t y, font_size_t font,
+                         const char *text, uint16_t fg)
+{
+    if (!s_lcd_ok) {
+        return;
+    }
+
+    esp_err_t ret = bsp_lcd_draw_text(x, y, font, text, fg, BSP_LCD_BLACK);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "draw '%s' failed: %s", text, esp_err_to_name(ret));
+    }
+}
+
+static void draw_right_fit(int16_t y, font_size_t font, const char *text,
+                           uint16_t fg, int16_t right_margin)
+{
+    char fitted[40];
+    const int16_t max_width = (int16_t)(BSP_LCD_WIDTH - right_margin);
+    fit_text_px(fitted, sizeof(fitted), text, font, max_width);
+
+    int16_t x = (int16_t)(BSP_LCD_WIDTH - right_margin -
+                          bsp_lcd_measure_text(font, fitted));
+    if (x < 0) {
+        x = 0;
+    }
+
+    draw_text_at(x, y, font, fitted, fg);
+}
+
+static void draw_boot_welcome(void)
+{
+    static const char title_src[] = "Remote Flash";
+    static const int16_t logo_gap = 6;
+    static const int16_t version_margin = 1;
+    const font_size_t title_font = FONT_DELICATUS_16;
+    const int16_t title_h = fonts_line_height(title_font);
+    const int16_t logo_w = (int16_t)ui_logo_width;
+    const int16_t logo_h = (int16_t)ui_logo_height;
+    const int16_t title_max_w =
+        (int16_t)(BSP_LCD_WIDTH - logo_w - logo_gap);
+
+    char title[32];
+    fit_text_px(title, sizeof(title), title_src, title_font, title_max_w);
+
+    const int16_t title_w = bsp_lcd_measure_text(title_font, title);
+    const int16_t group_w = (int16_t)(logo_w + logo_gap + title_w);
+    const int16_t group_h = logo_h > title_h ? logo_h : title_h;
+    int16_t group_x = (int16_t)((BSP_LCD_WIDTH - group_w) / 2);
+    if (group_x < 0) {
+        group_x = 0;
+    }
+    const int16_t group_y = (int16_t)((BSP_LCD_HEIGHT - group_h) / 2);
+    const int16_t logo_y = (int16_t)(group_y + (group_h - logo_h) / 2);
+    const int16_t title_y = (int16_t)(group_y + (group_h - title_h) / 2);
+
+    esp_err_t ret = bsp_lcd_draw_alpha_mask(group_x, logo_y,
+                                            ui_logo_width, ui_logo_height,
+                                            ui_logo_alpha,
+                                            BSP_LCD_WHITE, BSP_LCD_BLACK);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "draw logo failed: %s", esp_err_to_name(ret));
+    }
+
+    draw_text_at((int16_t)(group_x + logo_w + logo_gap), title_y,
+                 title_font, title, BSP_LCD_WHITE);
+    draw_right_fit((int16_t)(BSP_LCD_HEIGHT - title_h), title_font,
+                   APP_VERSION_DISPLAY, BSP_LCD_GRAY, version_margin);
+}
+
 static void draw_wifi_mode(ui_screen_t screen)
 {
     char ssid[33];
@@ -200,9 +270,7 @@ static void draw_screen(ui_screen_t screen)
 
     switch (screen) {
     case UI_BOOT_WELCOME:
-        draw_centered_fit(4, FONT_DELICATUS_16, "Welcome", BSP_LCD_WHITE);
-        draw_centered_fit(30, FONT_CAIROPIXEL_32,
-                          APP_VERSION_DISPLAY, BSP_LCD_GREEN);
+        draw_boot_welcome();
         break;
 
     case UI_BOOT_SD_MEMORY:

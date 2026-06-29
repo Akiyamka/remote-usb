@@ -28,9 +28,15 @@ export type DeviceInfo = {
       };
 };
 
-export type DeviceLiveMessage = {
-  deviceInfo: DeviceInfo;
-};
+export type DeviceLiveMessage =
+  | {
+      deviceInfo: DeviceInfo;
+      error?: never;
+    }
+  | {
+      deviceInfo?: never;
+      error: unknown;
+    };
 
 export type ActiveDeviceMode = Exclude<DeviceMode, 'switching'>;
 
@@ -274,8 +280,10 @@ export class RPC implements RPCAPI {
       for (const cb of this.deviceSubscribers) {
         cb({ deviceInfo });
       }
-    } catch {
-      // Keep polling. A temporary Wi-Fi drop should not permanently disconnect the UI.
+    } catch (error) {
+      for (const cb of this.deviceSubscribers) {
+        cb({ error });
+      }
     } finally {
       this.statusPollInFlight = false;
     }

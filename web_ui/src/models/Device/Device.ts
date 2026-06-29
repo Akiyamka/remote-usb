@@ -1,6 +1,12 @@
-import { signal } from '@preact/signals';
+import { batch, signal } from '@preact/signals';
 import { t } from '../../i18n.js';
-import { DeviceError, type DeviceInfo, type DeviceMode, type RPCAPI } from '../../RPCAPI';
+import {
+  DeviceError,
+  type DeviceInfo,
+  type DeviceLiveMessage,
+  type DeviceMode,
+  type RPCAPI,
+} from '../../RPCAPI';
 
 export class Device {
   static readonly expectedApiVersion = 1;
@@ -28,20 +34,16 @@ export class Device {
     this.$isConnecting.value = true;
     for (;;) {
       try {
-        await this.rpc.subscribeToDevice(({ deviceInfo }) => {
-          this.$deviceInfo.value = deviceInfo;
-          this.$currentMode.value = deviceInfo.mode;
-          this.$apiVersionMismatch.value =
-            deviceInfo.api_version === Device.expectedApiVersion
-              ? null
-              : { expected: Device.expectedApiVersion, actual: deviceInfo.api_version };
-        });
+        await this.rpc.subscribeToDevice((message) => this.handleDeviceMessage(message));
 
-        this.$errorMessage.value = null;
-        this.$isConnecting.value = false;
+        batch(() => {
+          this.$errorMessage.value = null;
+          this.$isConnecting.value = false;
+        });
         return;
       } catch (e) {
         if (e instanceof DeviceError && e.code === 'ConnectionLost') {
+          this.clearLiveState();
           await this.waitBeforeReconnect(reconnectDelayMs);
           reconnectDelayMs = this.nextReconnectDelay(reconnectDelayMs);
           continue;
@@ -52,6 +54,48 @@ export class Device {
         return;
       }
     }
+  }
+
+  private handleDeviceMessage(message: DeviceLiveMessage): void {
+    if (message.deviceInfo !== undefined) {
+      this.applyDeviceInfo(message.deviceInfo);
+      return;
+    }
+
+    this.handlePollingError(message.error);
+  }
+
+  private applyDeviceInfo(deviceInfo: DeviceInfo): void {
+    batch(() => {
+      this.$deviceInfo.value = deviceInfo;
+      this.$currentMode.value = deviceInfo.mode;
+      this.$errorMessage.value = null;
+      this.$isConnecting.value = false;
+      this.$apiVersionMismatch.value =
+        deviceInfo.api_version === Device.expectedApiVersion
+          ? null
+          : { expected: Device.expectedApiVersion, actual: deviceInfo.api_version };
+    });
+  }
+
+  private handlePollingError(error: unknown): void {
+    this.clearLiveState();
+
+    if (error instanceof DeviceError && error.code === 'ConnectionLost') {
+      this.$errorMessage.value = t('app.connectionLostReconnecting');
+      return;
+    }
+
+    this.$errorMessage.value = error instanceof Error ? error.message : String(error);
+  }
+
+  private clearLiveState(): void {
+    batch(() => {
+      this.$currentMode.value = 'switching';
+      this.$deviceInfo.value = null;
+      this.$apiVersionMismatch.value = null;
+      this.$isConnecting.value = false;
+    });
   }
 
   private async waitBeforeReconnect(delayMs: number): Promise<void> {

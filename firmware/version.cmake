@@ -1,2 +1,2 @@
-set(APP_VERSION "0.0.13")
+set(APP_VERSION "1.0.0")
 set(PROJECT_VER "${APP_VERSION}")

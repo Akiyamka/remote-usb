@@ -14,7 +14,7 @@ The file contents must be:
 
 ```
 ssid = your Wi-Fi network name
-pass = access point password
+password = access point password
 ```
 
 Replace the text after `=` with your access point name and password respectively, then **save the file**.
