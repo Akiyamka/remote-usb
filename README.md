@@ -4,6 +4,8 @@
 
 Remote Flash turns a [LILYGO T-Dongle S3](https://lilygo.cc/en-us/products/t-dongle-s3) into a USB flash drive that can be managed over Wi-Fi from a web browser.
 
+Simply put, you can manage files on a flash drive from any device on your network, which can be useful, for example, when transferring files to a device that does not support wi-fi
+
 The device has two modes:
 
 - HTTP mode: manage files on the SD card through the web UI.
