@@ -19,6 +19,8 @@ The device has two modes:
 
 On first boot, you must configure Wi-Fi before the web UI becomes available.
 
+![live view](docs/live_view.jpg)
+
 ## How to Configure Wi-Fi
 
 If Wi-Fi credentials have not been configured yet, the dongle creates a `wifi.cfg` file on the SD card and stops on the setup screen.
@@ -35,3 +37,6 @@ Replace the placeholder values with your Wi-Fi network name and password, save t
 The dongle supports 2.4 GHz Wi-Fi networks only. If your router uses separate names for 2.4 GHz and 5 GHz networks, use the 2.4 GHz SSID.
 
 After a successful connection, the credentials are saved to internal memory and `wifi.cfg` is removed from the SD card. To change the network later, create a new `wifi.cfg` in the SD card root with the same format and reboot the dongle.
+
+![HTTP Mode](docs/web_ui_http_mode.png)
+![Drive Mode](docs/web_ui_drive_mode.png)
