@@ -40,3 +40,6 @@ After a successful connection, the credentials are saved to internal memory and 
 
 ![HTTP Mode](docs/web_ui_http_mode.png)
 ![Drive Mode](docs/web_ui_drive_mode.png)
+
+## Limitations
+Hardware supports only USB Full-Speed - it's about 600-640 kB/s witch is pretty slow and not suited for transfer files more than 100MB
