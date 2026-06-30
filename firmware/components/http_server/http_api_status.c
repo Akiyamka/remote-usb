@@ -132,9 +132,9 @@ esp_err_t http_handle_mode_usb(httpd_req_t *req)
     }
 
     ui_state_show(UI_SWITCHING);
-    esp_err_t ret = sd_owner_switch_to_msc();
+    esp_err_t ret = usb_msc_init();
     if (ret == ESP_OK) {
-        ret = usb_msc_init();
+        ret = sd_owner_switch_to_msc();
     }
     xSemaphoreGive(s_switch_mutex);
 

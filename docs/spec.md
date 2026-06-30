@@ -80,7 +80,7 @@ Details in [hardware.md](hardware.md)
 
 ```
 STATE_BOOT          → executing the startup flow (welcome, SD check, wifi)
-STATE_ERROR         → terminal error (no SD, invalid wifi.cfg, etc.) — LED blink, awaiting reboot
+STATE_ERROR         → unrecoverable startup error (no SD, USB setup failure, etc.) — LED blink, awaiting reboot
 STATE_USB_MODE      → SD handed over to the host via MSC
 STATE_HTTP_MODE     → SD mounted via FATFS, accessible over HTTP
 STATE_SWITCHING    → intermediate state during USB↔HTTP transitions
@@ -108,10 +108,12 @@ This yields user-friendly behavior: if something is wrong with Wi-Fi, the user p
    └── OK → Display "Memory / total: XX / free: YY"
 4. Check /sdcard/wifi.cfg
    ├── Exists + valid → use credentials from file (in_memory_creds_source = FILE)
-   ├── Exists + invalid → "wifi.cfg invalid", LED blink red, STATE_ERROR
+   ├── Exists + invalid → "wifi.cfg invalid", LED blink red,
+   │                      expose SD over USB MSC, wait for reboot
    └── Not exists
        ├── NVS has credentials → use NVS creds (source = NVS)
-       └── NVS empty → create default wifi.cfg, "Please fill", LED blink green, STATE_ERROR
+       └── NVS empty → create default wifi.cfg, "Please fill", LED blink green,
+                       expose SD over USB MSC, wait for reboot
 5. Display "Connecting to <SSID>"
 6. wifi_sta_connect(ssid, password), timeout 15 sec
    ├── Failed → Display "Can't connect to <SSID>", LED blink red briefly,
@@ -1365,6 +1367,7 @@ async function checkCompatibility() {
 | `STATE_SWITCHING` | Solid yellow |
 | `STATE_ERROR` | Blink red |
 | Saving creds failed (special) | Solid yellow |
+| wifi.cfg invalid (waiting fix) | Blink red |
 | wifi.cfg created (waiting fill) | Blink green |
 
 ### 12.2. LCD screens
@@ -1622,6 +1625,24 @@ static void startup_error_loop(void)
     while (1) vTaskDelay(pdMS_TO_TICKS(1000));
 }
 
+static esp_err_t start_usb_storage(void)
+{
+    esp_err_t ret = usb_msc_init();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return sd_owner_switch_to_msc();
+}
+
+static void wait_with_usb_storage(ui_screen_t screen)
+{
+    ui_state_show(screen);
+    if (start_usb_storage() != ESP_OK) {
+        ui_state_show(UI_ERROR_GENERIC);
+    }
+    startup_error_loop();
+}
+
 void app_main(void)
 {
     // ===== 1. Init basics =====
@@ -1657,20 +1678,22 @@ void app_main(void)
     wifi_creds_t creds;
     wifi_creds_source_t source = WIFI_CREDS_NONE;
 
-    if (wifi_cfg_read_from_sd(&creds) == ESP_OK) {
+    ret = wifi_cfg_read_from_sd(&creds);
+    if (ret == ESP_OK) {
         source = WIFI_CREDS_FROM_FILE;
         ESP_LOGI(TAG, "Using wifi.cfg from SD");
+    } else if (ret != ESP_ERR_NOT_FOUND) {
+        wait_with_usb_storage(UI_BOOT_CONFIG_INVALID);
     } else if (wifi_cfg_read_from_nvs(&creds) == ESP_OK) {
         source = WIFI_CREDS_FROM_NVS;
         ESP_LOGI(TAG, "Using credentials from NVS");
     } else {
         // Need to create default wifi.cfg
         if (wifi_cfg_create_default() == ESP_OK) {
-            ui_state_show(UI_BOOT_CONFIG_CREATED);  // LED blink green
+            wait_with_usb_storage(UI_BOOT_CONFIG_CREATED);  // LED blink green
         } else {
-            ui_state_show(UI_BOOT_CONFIG_INVALID);
+            wait_with_usb_storage(UI_BOOT_CONFIG_INVALID);
         }
-        startup_error_loop();
     }
 
     // ===== 5. Connect Wi-Fi =====
@@ -1707,15 +1730,10 @@ void app_main(void)
     } else {
         ESP_LOGW(TAG, "Wi-Fi connect failed, falling back to USB mode");
         ui_state_show(UI_BOOT_CONNECT_FAILED);
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(3000));
 
         // Switch the SD into MSC mode — the device stays useful as a flash drive
-        ret = sd_owner_switch_to_msc();
-        if (ret != ESP_OK) {
-            ui_state_show(UI_ERROR_GENERIC);
-            startup_error_loop();
-        }
-        ret = usb_msc_init();
+        ret = start_usb_storage();
         if (ret != ESP_OK) {
             ui_state_show(UI_ERROR_GENERIC);
             startup_error_loop();
@@ -1752,9 +1770,9 @@ void app_main(void)
 | Test | Criterion |
 |---|---|
 | Boot with valid wifi.cfg | Connecting → success → wifi.cfg deleted → mode HTTP |
-| Boot without wifi.cfg, NVS empty | Default wifi.cfg created, blink green, halt |
-| Boot with invalid wifi.cfg | "wifi.cfg invalid", blink red, halt |
-| Boot, wifi.cfg valid but network unreachable | "Can't connect", 2 sec later → mode USB |
+| Boot without wifi.cfg, NVS empty | Default wifi.cfg created, blink green, SD exposed as USB storage, halt until reboot |
+| Boot with invalid wifi.cfg | "wifi.cfg invalid", blink red, SD exposed as USB storage, halt until reboot |
+| Boot, wifi.cfg valid but network unreachable | "Can't connect", 3 sec later → mode USB |
 | Boot from MODE_USB, wifi.cfg edited, reboot | New credentials applied, mode HTTP |
 | Boot without SD card | "SD Card required", blink red, halt |
 

@@ -67,7 +67,8 @@ Please fix and reboot
 ```
 
 - The LED indicator shall blink red.
-- The startup process shall stop.
+- The SD card shall be exposed to the USB host as a removable drive.
+- The startup process shall wait for reboot.
 
 If `wifi.cfg` is valid:
 
@@ -94,7 +95,8 @@ Please fill and reboot
 ```
 
 - The LED indicator shall blink green.
-- The startup process shall stop until reboot.
+- The SD card shall be exposed to the USB host as a removable drive.
+- The startup process shall wait for reboot.
 
 ### 5. Wi-Fi Connection
 
@@ -116,8 +118,9 @@ Can't connect to
 <SSID>
 ```
 
-- The LED indicator shall blink red.
-- The startup process shall stop or wait for reboot.
+- The LED indicator shall blink red briefly.
+- The SD card shall be exposed to the USB host as a removable drive.
+- The startup process shall continue in USB mode without the HTTP server.
 
 If the connection succeeds:
 
@@ -172,16 +175,16 @@ flowchart TD
     E --> F{"wifi.cfg<br/>on SD card?"}
 
     F -- "yes" --> G{"wifi.cfg<br/>valid?"}
-    G -- "no" --> H["wifi.cfg invalid<br/>Please fix and reboot<br/><br/>LED: blink red"]
+    G -- "no" --> H["wifi.cfg invalid<br/>Please fix and reboot<br/>USB removable drive<br/><br/>LED: blink red"]
     G -- "yes" --> L["Connecting to<br/>&lt;SSID&gt;"]
 
     F -- "no" --> I{"Wi-Fi settings<br/>stored in memory?"}
     I -- "yes" --> L
     I -- "no" --> J(("Create<br/>wifi.cfg"))
-    J --> K["wifi.cfg created.<br/>Please fill and reboot<br/><br/>LED: blink green"]
+    J --> K["wifi.cfg created.<br/>Please fill and reboot<br/>USB removable drive<br/><br/>LED: blink green"]
 
     L --> M{"Connected<br/>successfully?"}
-    M -- "no" --> N["Can't connect to<br/>&lt;SSID&gt;<br/><br/>LED: blink red"]
+    M -- "no" --> N["Can't connect to<br/>&lt;SSID&gt;<br/>USB removable drive<br/><br/>LED: blink red briefly"]
     M -- "yes" --> O["&lt;SSID&gt;<br/>192.168.110.88<br/><br/>LED: solid green"]
 
     O --> P{"Credentials<br/>stored in memory?"}

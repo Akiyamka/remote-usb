@@ -47,6 +47,29 @@ static void startup_error(ui_screen_t screen, const char *message, esp_err_t err
     startup_error_loop();
 }
 
+static esp_err_t start_usb_storage(void)
+{
+    esp_err_t ret = usb_msc_init();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    return sd_owner_switch_to_msc();
+}
+
+static void wait_with_usb_storage(ui_screen_t screen, const char *message)
+{
+    ui_state_show(screen);
+
+    esp_err_t ret = start_usb_storage();
+    if (ret != ESP_OK) {
+        startup_error(UI_ERROR_GENERIC, message, ret);
+    }
+
+    ESP_LOGW(TAG, "%s; SD exposed over USB", message);
+    startup_error_loop();
+}
+
 static void load_wifi_credentials(wifi_creds_t *creds,
                                   wifi_creds_source_t *source)
 {
@@ -61,8 +84,8 @@ static void load_wifi_credentials(wifi_creds_t *creds,
 
     if (ret != ESP_ERR_NOT_FOUND) {
         ESP_LOGE(TAG, "wifi.cfg invalid: %s", esp_err_to_name(ret));
-        ui_state_show(UI_BOOT_CONFIG_INVALID);
-        startup_error_loop();
+        wait_with_usb_storage(UI_BOOT_CONFIG_INVALID, "wifi.cfg invalid");
+        return;
     }
 
     ret = wifi_cfg_read_from_nvs(creds);
@@ -79,14 +102,15 @@ static void load_wifi_credentials(wifi_creds_t *creds,
     ret = wifi_cfg_create_default();
     if (ret == ESP_OK) {
         ESP_LOGW(TAG, "Created /sdcard/wifi.cfg; fill it and reboot");
-        ui_state_show(UI_BOOT_CONFIG_CREATED);
-    } else {
-        ESP_LOGE(TAG, "Failed to create default wifi.cfg: %s",
-                 esp_err_to_name(ret));
-        ui_state_show(UI_BOOT_CONFIG_INVALID);
+        wait_with_usb_storage(UI_BOOT_CONFIG_CREATED, "wifi.cfg created");
+        return;
     }
 
-    startup_error_loop();
+    ESP_LOGE(TAG, "Failed to create default wifi.cfg: %s",
+             esp_err_to_name(ret));
+    wait_with_usb_storage(UI_BOOT_CONFIG_INVALID,
+                          "Failed to create default wifi.cfg");
+    return;
 }
 
 static bool persist_file_credentials(const wifi_creds_t *creds,
@@ -186,14 +210,9 @@ void app_main(void)
     ui_state_show(UI_BOOT_CONNECT_FAILED);
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-    ret = sd_owner_switch_to_msc();
+    ret = start_usb_storage();
     if (ret != ESP_OK) {
-        startup_error(UI_ERROR_GENERIC, "sd_owner_switch_to_msc failed", ret);
-    }
-
-    ret = usb_msc_init();
-    if (ret != ESP_OK) {
-        startup_error(UI_ERROR_GENERIC, "usb_msc_init failed", ret);
+        startup_error(UI_ERROR_GENERIC, "start_usb_storage failed", ret);
     }
 
     ui_state_show(UI_MODE_USB);
